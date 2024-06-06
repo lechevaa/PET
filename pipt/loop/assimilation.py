@@ -20,7 +20,7 @@ from pipt.misc_tools import qaqc_tools
 from pipt.loop.ensemble import Ensemble
 from misc.system_tools.environ_var import OpenBlasSingleThread
 from pipt.misc_tools import analysis_tools as at
-
+from misc.preconditioning.ml_routine import ml_routine
 
 class Assimilate:
     """
@@ -127,6 +127,11 @@ class Assimilate:
                     np.savez('prior_forecast.npz', **
                              {'pred_data': self.ensemble.pred_data})
 
+                # ml acceleration
+                if 'mlacceleration' in self.ensemble.keys_da:
+                    if self.ensemble.keys_da['mlacceleration']:
+                        ml_routine(self.ensemble.sim.input_dict['parallel'], self.ensemble.disable_tqdm, self.ensemble.iteration, finetuning=False)
+                        
             # For the remaining iterations we start by applying the analysis and finish by running the forecast
             else:
                 # Analysis (in the update_scheme class)
@@ -154,6 +159,10 @@ class Assimilate:
                 #
                 conv, success_iter, self.why_stop = self.ensemble.check_convergence()
 
+                if not conv and 'mlacceleration' in self.ensemble.keys_da:
+                    if self.ensemble.keys_da['mlacceleration']:
+                        ml_routine(self.ensemble.sim.input_dict['parallel'], self.ensemble.disable_tqdm, self.ensemble.iteration, finetuning=True)
+                        
             # if reduction of objective function -> save the state
             if success_iter:
                 # More general method to save all relevant information from an iteration analysis/forecast step
@@ -466,7 +475,6 @@ class Assimilate:
             os.rename('restart_sim_results.p', 'sim_results.p')
             print('--- Restart sim results used ---')
             return
-
         # If we are doing an sequential assimilation, such as enkf, we loop over assimilation steps
         if len(self.ensemble.keys_da['assimindex']) > 1:
             assim_step = self.ensemble.iteration
@@ -485,7 +493,6 @@ class Assimilate:
         # Get TRUEDATAINDEX
         true_order = [self.ensemble.keys_da['obsname'],
                       self.ensemble.keys_da['truedataindex']]
-
         # List assim. index
         if isinstance(true_order[1], list):  # Check if true data prim. ind. is a list
             true_prim = [true_order[0], [x for x in true_order[1]]]
@@ -495,10 +502,9 @@ class Assimilate:
             l_prim = [int(x) for x in assim_ind[1]]
         else:  # Float
             l_prim = [int(assim_ind[1])]
-
         # Run forecast. Predicted data solved in self.ensemble.pred_data
         self.ensemble.calc_prediction()
-
+       
         # Filter pred. data needed at current assimilation step. This essentially means deleting pred. data not
         # contained in the assim. indices for current assim. step or does not have obs. data at this index
         self.ensemble.pred_data = [elem for i, elem in enumerate(self.ensemble.pred_data) if i in l_prim or

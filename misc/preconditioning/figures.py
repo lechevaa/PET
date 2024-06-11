@@ -3,6 +3,10 @@ import pickle
 import os
 from collections import defaultdict
 import numpy as np
+# Turn off oneDNN custom operations
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+import tensorflow as tf
+from misc.preconditioning.utils import parse_function_kerasify, perform_linear_regression
 
 def plot_loss(en_hist_dict, figname, ml_model_folder, finetuning):
     """
@@ -60,7 +64,7 @@ def plot_loss(en_hist_dict, figname, ml_model_folder, finetuning):
     plt.legend()
     plt.grid(True)
     plt.savefig(f'{ml_model_folder}/{figname}.png')
-    plt.clf()
+    plt.close()
 
 def plot_tof_hist(tof_dict, savepath):
     for well, tofs in tof_dict.items():
@@ -71,5 +75,35 @@ def plot_tof_hist(tof_dict, savepath):
         plt.title('Histogram of Time of Flight Values')
         plt.legend()
         plt.savefig(savepath + os.sep + well + '.png')
-        plt.clf()
+        plt.close()
     return 
+
+
+def parity_plot(well_name, figname, ml_model_folder):
+    with open(f'{ml_model_folder}/{well_name}_predictions.pickle', 'rb') as handle:
+        data_dict = pickle.load(handle)
+        y_hat = np.array(data_dict['predictions'])
+        y_true = np.array(data_dict['solutions'])
+    
+    # Data processing
+    props = ['PRESSURE', 'SWAT', 'SGAS', 'RV', 'RS']
+    Nc = int(y_true.shape[1]/len(props))
+    fig, axs = plt.subplots(1, len(props), figsize=(6*len(props), 6))
+
+    for i, prop in enumerate(props):
+        prop_true = y_true[:, i*Nc:(i+1)*Nc]
+        prop_pred = y_hat[:, i*Nc:(i+1)*Nc]
+        prop_true_l2 = np.linalg.norm(prop_true, axis=1)
+        prop_pred_l2 = np.linalg.norm(prop_pred, axis=1)
+        _, _, r2 = perform_linear_regression(prop_true_l2,  prop_pred_l2)
+                                               
+        axs[i].scatter(prop_pred_l2, prop_true_l2, label=well_name, s=5)
+        plot_range = [min(min(prop_pred_l2), min(prop_true_l2)), max(max(prop_pred_l2), max(prop_true_l2))]
+        axs[i].plot(plot_range, plot_range, color='red', linestyle='--')
+        axs[i].set_xlabel(f'Predicted {prop}')
+        axs[i].set_ylabel(f'True {prop}')
+        axs[i].set_title(f"{well_name} {prop}: r2: {r2:.2f}")
+
+    fig.tight_layout()
+    plt.savefig(f'{ml_model_folder}/{figname}_{well_name}.png')
+    plt.close()

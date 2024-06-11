@@ -7,6 +7,7 @@ import pickle
 from collections import defaultdict
 from datetime import date, datetime
 import subprocess as sp
+import csv
 
 from input_output import read_config
 from misc.preconditioning.figures import plot_tof_hist
@@ -164,6 +165,13 @@ def compute_TOF_local_domain(tof_dict, threshold):
         well_neighbors[well]['f'] = filtered_tof
     return well_neighbors
 
+def save_dict_to_csv(well_dict, savepath, max_distance) -> None:
+    for well_name, cells in well_dict.items():
+        with open(savepath + os.sep + f'{well_name}_local_domain_{max_distance}.csv', 'w') as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow([well_name, cells['f']])
+    return 
+
 def main(member):
     ml_data_folder = 'En_ml_data'
     if not os.path.isdir(ml_data_folder):
@@ -211,12 +219,15 @@ def main(member):
     # Save the dictionary to a file
     with open(ml_data_folder + os.sep + f'well_dict_local_{max_distance}.pkl', 'wb') as f:
         pickle.dump(well_local_domains, f)
+
+    save_dict_to_csv(well_local_domains, savepath=ml_data_folder, max_distance=max_distance)
+
     # Compute well schedule for input features, we don't care about the last timestep
     well_schedules = extract_well_schedule(simdata[:-1], root, grid, well_names)
 
     # Static and Dynamic features extraction
     # Dynamic features
-    dyn_props = ['PRESSURE', 'SGAS']
+    dyn_props = ['PRESSURE', 'SWAT', 'SGAS', 'RV', 'RS']
     assert len(well_schedules[well_names[0]]) == len(simdata) - 1
     well_dyn_props = defaultdict(lambda: defaultdict(list))
 
@@ -245,7 +256,7 @@ def main(member):
         well_dyn_props[well_name]['Y'] = np.concatenate(well_dyn_props[well_name]['Y'], axis=0)
     
     # Static Features 
-    stat_props = ['PERMX']
+    stat_props = ['PERMX', 'PERMY', 'PERMZ']
     stat_props_np = extract_static_props(root, stat_props)
 
     for well_name in well_names:

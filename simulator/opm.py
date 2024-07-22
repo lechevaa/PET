@@ -46,8 +46,13 @@ class flow(eclipse):
                 com.append(self.options['sim_path'] + 'flow')
                 if self.options['parsing-strictness']:
                     com.extend(['--parsing-strictness=' + self.options['parsing-strictness']])
+                if 'enable_write_all_solutions' in self.options:
+                    com.extend(['--enable-write-all-solutions=' + self.options['enable_write_all_solutions']])
+                    com.extend(['--enable-opm-rst-file=' + self.options['enable_write_all_solutions']])
                 com.extend(['--output-dir=' + folder, *
                            self.options['sim_flag'].split(), filename + '.DATA'])
+                # Save solver informations 
+                com.extend(['--output-extra-convergence-info=step,iterations'])
                 if 'sim_limit' in self.options:
                     call(com, stdout=DEVNULL, timeout=self.options['sim_limit'])
                 else:

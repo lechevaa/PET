@@ -123,7 +123,9 @@ class eclipse:
                     self.options['parsing-strictness'] = self.input_dict['simoptions'][i][1]
         if 'sim_limit' in self.input_dict:
             self.options['sim_limit'] = self.input_dict['sim_limit']
-
+        if 'enable_write_all_solutions' in self.input_dict:
+            if self.input_dict['enable_write_all_solutions']:
+                self.options['enable_write_all_solutions'] = 'true'
         if 'reportdates' in self.input_dict:
             self.reportdates = [
                 x * 30 for x in range(1, int(self.input_dict['reportdates'][1]))]
@@ -234,7 +236,7 @@ class eclipse:
         self.pred_data = [deepcopy({}) for _ in range(len(assimIndex))]
         for ind in self.l_prim:
             for key in self.all_data_types:
-                self.pred_data[ind][key] = np.zeros((1, 1))
+                self.pred_data[ind][key] = np.zeros((1,))
 
         if isinstance(trueOrder[1], list):  # Check if true data prim. ind. is a list
             self.true_prim = [trueOrder[0], [x for x in trueOrder[1]]]
@@ -342,11 +344,10 @@ class eclipse:
             for key in self.all_data_types:
                 if self.pred_data[prim_ind][key] is not None:  # Obs. data at assim. step
                     true_data_info = [self.true_prim[0], self.true_prim[1][prim_ind]]
-                    try:
-                        data_array = self.get_sim_results(key, true_data_info, member)
-                        self.pred_data[prim_ind][key] = data_array
-                    except:
-                        pass
+                    
+                    data_array = self.get_sim_results(key, true_data_info, member)
+                    self.pred_data[prim_ind][key] = data_array
+        
 
     def coarsen(self, folder, ensembleMember=None):
         """

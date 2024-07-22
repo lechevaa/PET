@@ -1,8 +1,11 @@
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator
 import pickle 
 import os
 from collections import defaultdict
 import numpy as np
+import pandas as pd
+
 # Turn off oneDNN custom operations
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import tensorflow as tf
@@ -68,7 +71,6 @@ def plot_loss(en_hist_dict, figname, ml_model_folder, finetuning):
 
 def plot_tof_hist(tof_dict, savepath):
     for well, tofs in tof_dict.items():
-        print(len(list(tofs)))
         plt.hist(tofs, bins=100, label=well)
         plt.xlabel('Time of Flight')
         plt.ylabel('Frequency')
@@ -79,7 +81,7 @@ def plot_tof_hist(tof_dict, savepath):
     return 
 
 
-def parity_plot(well_name, figname, ml_model_folder):
+def quality_plots(well_name, figname, ml_model_folder):
     with open(f'{ml_model_folder}/{well_name}_predictions.pickle', 'rb') as handle:
         data_dict = pickle.load(handle)
         y_hat = np.array(data_dict['predictions'])
@@ -88,22 +90,52 @@ def parity_plot(well_name, figname, ml_model_folder):
     # Data processing
     props = ['PRESSURE', 'SWAT', 'SGAS', 'RV', 'RS']
     Nc = int(y_true.shape[1]/len(props))
-    fig, axs = plt.subplots(1, len(props), figsize=(6*len(props), 6))
+    fig, axs = plt.subplots(3, len(props), figsize=(6*len(props), 6*3))
 
     for i, prop in enumerate(props):
         prop_true = y_true[:, i*Nc:(i+1)*Nc]
         prop_pred = y_hat[:, i*Nc:(i+1)*Nc]
+
+        # # remove algebric correction
+        # if prop == 'SGAS':
+        #     prop_true -= y_true[:, 1*Nc:2*Nc]
+        #     prop_pred -= y_hat[:, 1*Nc:2*Nc]
         prop_true_l2 = np.linalg.norm(prop_true, axis=1)
         prop_pred_l2 = np.linalg.norm(prop_pred, axis=1)
-        _, _, r2 = perform_linear_regression(prop_true_l2,  prop_pred_l2)
-                                               
-        axs[i].scatter(prop_pred_l2, prop_true_l2, label=well_name, s=5)
+        slope, _, r2 = perform_linear_regression(prop_true_l2,  prop_pred_l2)
+
+        # Parity Plots                             
+        axs[0][i].scatter(prop_pred_l2, prop_true_l2, label=well_name, s=5)
         plot_range = [min(min(prop_pred_l2), min(prop_true_l2)), max(max(prop_pred_l2), max(prop_true_l2))]
-        axs[i].plot(plot_range, plot_range, color='red', linestyle='--')
-        axs[i].set_xlabel(f'Predicted {prop}')
-        axs[i].set_ylabel(f'True {prop}')
-        axs[i].set_title(f"{well_name} {prop}: r2: {r2:.2f}")
+        axs[0][i].plot(plot_range, plot_range, color='red', linestyle='--')
+        axs[0][i].set_xlabel(f'Predicted {prop}')
+        axs[0][i].set_ylabel(f'True {prop}')
+        axs[0][i].set_title(f"{well_name} {prop}: r2: {r2:.2f} slope: {slope:.2f}")
+
+        # Residual plots
+        residuals = prop_true - prop_pred
+        norm_residuals = np.linalg.norm(residuals, axis=1)
+        axs[1][i].scatter(np.arange(len(norm_residuals)), norm_residuals, label=well_name, s=5)
+
+        # Residual distribution
+        flat_residuals = residuals.flatten()
+        axs[2][i].hist(flat_residuals, bins=10, density=True, color='green', alpha=0.7)
 
     fig.tight_layout()
     plt.savefig(f'{ml_model_folder}/{figname}_{well_name}.png')
     plt.close()
+
+
+def plot_solver_report(ml_data_folder:str, figname:str) -> None:
+    solver_reports = sorted([f for f in os.listdir(ml_data_folder) if os.path.isfile(os.path.join(ml_data_folder, f)) and f.startswith('solver_report_') and f.endswith('.csv')])
+    fig, ax =  plt.subplots()
+    for report in solver_reports:
+        solver_df = pd.read_csv(ml_data_folder + os.sep + report, sep='\t')
+        cum_NewtIt = [np.cumsum(y) for y in solver_df['NewtIt'].values]
+        ax.scatter(solver_df['Time(day)'], solver_df['NewtIt'], s=5)
+    ax.set_xticks([])
+    ax.grid(which='both', linestyle='--', linewidth=0.5)
+    fig.tight_layout()
+    plt.savefig(f'{ml_data_folder}/{figname}.png')
+    plt.close()
+    

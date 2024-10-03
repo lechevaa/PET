@@ -5,6 +5,7 @@ import os
 from collections import defaultdict
 import numpy as np
 import pandas as pd
+from typing import Union
 
 # Turn off oneDNN custom operations
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
@@ -69,7 +70,7 @@ def plot_loss(en_hist_dict, figname, ml_model_folder, finetuning):
     plt.savefig(f'{ml_model_folder}/{figname}.png')
     plt.close()
 
-def plot_tof_hist(tof_dict, savepath):
+def plot_tof_hist(tof_dict, savepath:str) -> None:
     for well, tofs in tof_dict.items():
         plt.hist(tofs, bins=100, label=well)
         plt.xlabel('Time of Flight')
@@ -81,7 +82,7 @@ def plot_tof_hist(tof_dict, savepath):
     return 
 
 
-def quality_plots(well_name, figname, ml_model_folder):
+def quality_plots(well_name:str, figname:str, ml_model_folder:str,  model:str, epsilon:float=0.3) -> Union[bool, None]:
     with open(f'{ml_model_folder}/{well_name}_predictions.pickle', 'rb') as handle:
         data_dict = pickle.load(handle)
         y_hat = np.array(data_dict['predictions'])
@@ -91,15 +92,15 @@ def quality_plots(well_name, figname, ml_model_folder):
     props = ['PRESSURE', 'SWAT', 'SGAS', 'RV', 'RS']
     Nc = int(y_true.shape[1]/len(props))
     fig, axs = plt.subplots(3, len(props), figsize=(6*len(props), 6*3))
-
+    is_well_model_ready = True
     for i, prop in enumerate(props):
-        prop_true = y_true[:, i*Nc:(i+1)*Nc]
-        prop_pred = y_hat[:, i*Nc:(i+1)*Nc]
+        if model == 'DeepONet':
+            prop_true = y_true[:, :, i:i+1]
+            prop_pred = y_hat[:, :, i:i+1]
+        else:
+            prop_true = y_true[:, i*Nc:(i+1)*Nc]
+            prop_pred = y_hat[:, i*Nc:(i+1)*Nc]
 
-        # # remove algebric correction
-        # if prop == 'SGAS':
-        #     prop_true -= y_true[:, 1*Nc:2*Nc]
-        #     prop_pred -= y_hat[:, 1*Nc:2*Nc]
         prop_true_l2 = np.linalg.norm(prop_true, axis=1)
         prop_pred_l2 = np.linalg.norm(prop_pred, axis=1)
         slope, _, r2 = perform_linear_regression(prop_true_l2,  prop_pred_l2)
@@ -121,21 +122,76 @@ def quality_plots(well_name, figname, ml_model_folder):
         flat_residuals = residuals.flatten()
         axs[2][i].hist(flat_residuals, bins=10, density=True, color='green', alpha=0.7)
 
+        if not (1. - epsilon <= slope <= 1. + epsilon and 1. - epsilon <= r2):
+            is_well_model_ready = False
     fig.tight_layout()
     plt.savefig(f'{ml_model_folder}/{figname}_{well_name}.png')
     plt.close()
 
+    if is_well_model_ready:
+        return well_name
+    return 
 
 def plot_solver_report(ml_data_folder:str, figname:str) -> None:
     solver_reports = sorted([f for f in os.listdir(ml_data_folder) if os.path.isfile(os.path.join(ml_data_folder, f)) and f.startswith('solver_report_') and f.endswith('.csv')])
-    fig, ax =  plt.subplots()
+    cum_NewtIt = []
+    NewtHist = []
+    x_lists = []
+    dt_list = []
     for report in solver_reports:
         solver_df = pd.read_csv(ml_data_folder + os.sep + report, sep='\t')
-        cum_NewtIt = [np.cumsum(y) for y in solver_df['NewtIt'].values]
-        ax.scatter(solver_df['Time(day)'], solver_df['NewtIt'], s=5)
-    ax.set_xticks([])
-    ax.grid(which='both', linestyle='--', linewidth=0.5)
+        cum_NewtIt.append(np.cumsum(np.array(solver_df['NewtIt'].values, dtype=np.float64)))
+        x_lists.append(np.array(solver_df['Time(day)'].values, dtype=np.float64))
+        dt_list += list(np.array(solver_df['TStep(day)'].values))
+        NewtHist += list(solver_df['NewtIt'].values)
+    
+    dict_raw = {'NewtIt': NewtHist}
+    if not os.path.isfile(f'{ml_data_folder}/{figname}_raw.pkl'):
+        with open(f'{ml_data_folder}/{figname}_raw.pkl', 'wb') as f:
+            pickle.dump({0 : dict_raw}, f)
+    else:
+        with open(f'{ml_data_folder}/{figname}_raw.pkl', 'rb+') as f:
+            NewtDict = pickle.load(f)
+            num_iter = len(NewtDict.keys())
+            pickle.dump({num_iter - 1 : dict_raw}, f)
+            
+    # 911 is number of days for drogon
+    common_x = np.linspace(0, 911, 100)
+    interpolated_y_lists = [np.interp(common_x, x, y) for x, y in zip(x_lists, cum_NewtIt)]
+    mean_cumulative_y = np.mean(interpolated_y_lists, axis=0)
+
+    if os.path.isfile(f'{ml_data_folder}/{figname}.pkl'):
+        with open(f'{ml_data_folder}/{figname}.pkl', 'rb') as f:
+            fig = pickle.load(f)
+            ax1 = fig.axes[0]
+            ax2 = fig.axes[1]
+            ax3 = fig.axes[2]
+    else:
+        fig, (ax1, ax2, ax3) =  plt.subplots(1, 3, figsize=(20, 8))
+
+    existing_curves = len(ax1.get_lines()) + 1
+    
+    cmap = plt.get_cmap('tab10')
+    color = cmap(existing_curves % cmap.N)
+
+    ax1.plot(common_x, mean_cumulative_y, label=f'Ensemble {existing_curves}: {mean_cumulative_y[-1]:.2f}', color=color)
+    ax1.set_xlabel('Time (Day)')
+    ax1.set_ylabel('Mean Cumulative Newton iterations')
+    ax1.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    ax1.grid(which='both', linestyle='--', linewidth=0.5)
+
+    ax2.hist(NewtHist, bins=21, alpha=0.4, color=color)
+
+    ax3.scatter(dt_list, NewtHist)
+    ax3.set_xlabel('TimeStep (Day)')
+    ax3.set_ylabel('Newton Iterations')
+    ax3.axhline(y=3, color='r', linestyle='--', label='Newton Iterations = 3')
+
     fig.tight_layout()
+
+    with open(f'{ml_data_folder}/{figname}.pkl', 'wb') as f:
+        pickle.dump(fig, f)
+
     plt.savefig(f'{ml_data_folder}/{figname}.png')
     plt.close()
     

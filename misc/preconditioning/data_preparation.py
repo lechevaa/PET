@@ -19,7 +19,7 @@ from resdata.grid import Grid
 from resdata.resfile import ResdataFile
 from resdata.summary import Summary
 
-def get_filename(folder):
+def get_filename(folder:str) -> None:
     base_names = [filename.split('.')[0] for filename in os.listdir(folder)]
     if all(name == base_names[0] for name in base_names):
         return base_names[0]
@@ -37,10 +37,6 @@ def get_extensions(folder):
         else:
             misc_ext.append(ext)
     return sorted(sums), sorted(simdata), misc_ext
-
-def get_initial_date():
-    _, kf = read_config.read_txt('drogon_1.pipt')
-    return datetime.strptime(kf['startdate'], '%m/%d/%Y').date()
 
 def update_well_dict(well_dict, root, sim, grid, well_names):
     rd_sum = ResdataFile(root + '.' + sim)
@@ -76,6 +72,36 @@ def extract_well_schedule_and_rates(simdata, root, grid, well_names):
     return well_schedule, well_rates
 
 
+def extract_N_well_schedule_and_rates(simdata, root, grid, well_names, N):
+    well_schedule = defaultdict(list)
+    well_rates = defaultdict(list)
+    well_starts = defaultdict(list) 
+    for i, sim in enumerate(simdata):
+        rd_sum = ResdataFile(root + '.' + sim)
+        WI = WellInfo(grid, rd_sum)
+        for well_name in well_names:
+            if well_name in WI.allWellNames():
+                if well_name not in well_starts.keys():
+                    # schedule
+                    well_schedule[well_name].append(True)
+                    # rates
+                    well_rates[well_name].append(WI[well_name][0].volumeRate())
+                elif i - well_starts[well_name] < N:
+                    # schedule
+                    well_schedule[well_name].append(True)
+                    # rates
+                    well_rates[well_name].append(WI[well_name][0].volumeRate()) 
+                else:
+                    well_schedule[well_name].append(False)
+                    well_rates[well_name].append(-np.inf)
+            else:
+                well_schedule[well_name].append(False)
+                well_rates[well_name].append(-np.inf)
+            if sum(well_schedule[well_name]) == 1:
+                well_starts[well_name] = i
+
+    return well_schedule, well_rates
+
 def extract_dynamic_props(sim, root, props):
     prop_np = []
     rd = ResdataFile(root + '.' + sim)
@@ -87,12 +113,19 @@ def extract_dynamic_props(sim, root, props):
             prop_np.append(p_np)
         except KeyError:
             # if one key, is missing, return None
-            print("KeyError: ", prop)
+            print("KeyError: ", prop, " at ", root + '.' + sim)
             return None
     # There may be some OPM crash that generates files but with no property
     props_np = np.concatenate(prop_np, axis=2)
     return props_np
-    
+
+def get_initial_date():
+    #### Case dependant ####
+    _, kf = read_config.read_txt('3D_ES.pipt')
+    # _, kf = read_config.read_txt('drogon_1.pipt')
+    ####
+    return datetime.strptime(kf['startdate'], '%m/%d/%Y')
+
 def extract_timetsteps(root):
     rd_sum = Summary(root)
     dates = rd_sum.dates
@@ -116,11 +149,12 @@ def extract_solver_props(root:str, data_folder:str, member:int) -> None:
     data = []
     for line in lines[1:]:
         # Split the line into values using regex for multiple spaces
-        values = re.split(r'\s{2,}', line.strip())
+        values = re.split(r'\s+', line.strip())
         # Append the values to the data list
-        data.append(values)
+        data.append(np.array(values, dtype=np.float64))
     df_infostep = pd.DataFrame(data, columns=columns_list)
     df_infostep_ = df_infostep[['Time(day)' , 'TStep(day)', 'NewtIt']]
+
     df_infostep_.to_csv(data_folder + os.sep + 'solver_report_' + str(member) + '.csv', sep='\t')
     return 
 
@@ -201,9 +235,9 @@ def compute_TOF_local_domain(tof_dict, threshold):
         well_neighbors[well]['f'] = filtered_tof
     return well_neighbors
 
-def save_dict_to_csv(well_dict, savepath, max_distance) -> None:
+def save_dict_to_csv(well_dict, savepath) -> None:
     for well_name, cells in well_dict.items():
-        with open(savepath + os.sep + f'{well_name}_local_domain_{max_distance}.csv', 'w') as csv_file:
+        with open(savepath + os.sep + f'{well_name}_local_domain.csv', 'w') as csv_file:
             writer = csv.writer(csv_file)
             writer.writerow([well_name, cells['f']])
     return 
@@ -217,8 +251,17 @@ def main(member):
     filename = get_filename(folder)
     _, simdata, _ = get_extensions(folder)
     root = folder + os.sep + filename
+
+    #### Case dependant ####
     well_mode_dict = {'INJ':['A5', 'A6'],
             'PROD': ['A1', 'A2', 'A3', 'A4']}
+    # well_mode_dict = {'INJ':[],
+    #         'PROD': ['A2']}
+   
+    # well_mode_dict = {'INJ': ['INJ1', 'INJ2', 'INJ3'], 'PROD':['PRO1', 'PRO2', 'PRO3']}
+    # well_mode_dict = {'INJ': [], 'PROD':['PRO1']}
+    ##### 
+
     well_names = well_mode_dict['INJ'] + well_mode_dict['PROD']
 
     # Extract solver props
@@ -239,10 +282,10 @@ def main(member):
     
 
     # Compute local well domain
-    mode = 'ToF'
-    max_distance = 50
-    if os.path.isfile(ml_data_folder + os.sep + f'well_dict_local_{max_distance}.pkl'):
-        well_local_domains = pickle.load(open(ml_data_folder + os.sep + f'well_dict_local_{max_distance}.pkl', 'rb'))
+    mode = 'NotToF'
+    max_distance = 2
+    if os.path.isfile(ml_data_folder + os.sep + f'well_dict_local.pkl'):
+        well_local_domains = pickle.load(open(ml_data_folder + os.sep + f'well_dict_local.pkl', 'rb'))
     else:
         # need to compute ToF local domain but care parallelisation
         # first arrived member computes for all
@@ -256,26 +299,29 @@ def main(member):
             well_local_domains = bfs_extend_neighborhood(well_dict, grid, max_distance=max_distance)
         
         # before saving, other members may have gone through the if statement too, check again
-        if not os.path.isfile(ml_data_folder + os.sep + f'well_dict_local_{max_distance}.pkl'):
+        if not os.path.isfile(ml_data_folder + os.sep + f'well_dict_local.pkl'):
             # Save the dictionary to a file
-            with open(ml_data_folder + os.sep + f'well_dict_local_{max_distance}.pkl', 'wb') as f:
+            with open(ml_data_folder + os.sep + f'well_dict_local.pkl', 'wb') as f:
                 pickle.dump(well_local_domains, f)
-            save_dict_to_csv(well_local_domains, savepath=ml_data_folder, max_distance=max_distance)
+            save_dict_to_csv(well_local_domains, savepath=ml_data_folder)
 
     # Compute well schedule for input features, we don't care about the last timestep
-    well_schedules, well_rates = extract_well_schedule_and_rates(simdata[:-1], root, grid, well_names)
-
+    # well_schedules, well_rates = extract_well_schedule_and_rates(simdata[:-1], root, grid, well_names)
+    N = 10
+    well_schedules, well_rates =  extract_N_well_schedule_and_rates(simdata[:-1], root, grid, well_names, N=N)
+    
     # Static Features 
-    stat_props = ['PERMX', 'PERMY', 'PERMZ']
+    stat_props = ['PERMX']
+
     stat_props_np = extract_static_props(root, stat_props)
 
     # Static and Dynamic features extraction
     # Dynamic features
     dyn_props = ['PRESSURE', 'SWAT', 'SGAS', 'RV', 'RS']
-    assert len(well_schedules[well_names[0]]) == len(simdata) - 1
-    
+    assert len(well_schedules[well_names[0]]) == len(simdata) - 1 == len(dts)
     # If opm creates empty file due to exceptions, dyn_props_np is None
     dyn_props_np = extract_dynamic_props(simdata[0], root, dyn_props)
+    broken = False
     if dyn_props_np is not None:
         for i in range(1, len(simdata)):
             well_dyn_props = defaultdict(lambda: defaultdict(list))
@@ -292,7 +338,11 @@ def main(member):
             dyn_props_np = extract_dynamic_props(simdata[i], root, dyn_props)
             # There may be some crash at any step of the simulation, need to check and stop if so
             if dyn_props_np is None:
+                print(f"Breaking due to corrupted input data at sim {i} from member {member}")
+                broken = True
                 break
+            if broken:
+                print("Not supposed to be here")
             for well_name in well_names:
                 # Check if well was active during previous step
                 if well_schedules[well_name][i-1]:

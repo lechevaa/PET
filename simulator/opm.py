@@ -52,9 +52,24 @@ class flow(eclipse):
                 com.extend(['--output-dir=' + folder, *
                            self.options['sim_flag'].split(), filename + '.DATA'])
                 # Save solver informations 
-                com.extend(['--output-extra-convergence-info=step,iterations'])
+                com.extend(['--output-extra-convergence-info=steps'])
+                com.extend(['--tolerance-cnv-relaxed=1e-3'])
+                # com.extend(['--solve-welleq-initially=false'])
+                com.extend(['--linear-solver=cprw'])
+                com.extend(['--initial-time-step-in-days=1.'])
+                com.extend(['--newton-max-iterations=20'])
+                com.extend(['--solver-restart-factor=0.75'])
+                com.extend(['--solver-max-growth=5'])
+                com.extend(['--solver-growth-factor=5'])
+                com.extend(['--time-step-control-target-newton-iterations=18'])
+                com.extend(['--time-step-control-growth-damping-factor=5'])
+                com.extend(['--time-step-control-growth-rate=5'])
+                # com.extend(['--time-step-control-decay-rate=1'])
+                com.extend(['--time-step-control=newtoniterationcount'])
+                com.extend(['--enable-drift-compensation=false'])
+
                 if 'sim_limit' in self.options:
-                    call(com, stdout=DEVNULL, timeout=self.options['sim_limit'])
+                    call(com,  stdout=DEVNULL, timeout=self.options['sim_limit'])
                 else:
                     call(com, stdout=DEVNULL)
                 raise ValueError  # catch errors in run_sim

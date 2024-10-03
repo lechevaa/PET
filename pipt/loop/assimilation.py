@@ -129,8 +129,9 @@ class Assimilate:
 
                 # ml acceleration
                 if 'mlacceleration' in self.ensemble.keys_da:
+                    well_models_ready = None
                     if self.ensemble.keys_da['mlacceleration']:
-                        ml_routine(self.ensemble.sim.input_dict['parallel'], self.ensemble.disable_tqdm, self.ensemble.iteration, finetuning=False)
+                        well_models_ready = ml_routine(self.ensemble.sim.input_dict['parallel'], self.ensemble.disable_tqdm, self.ensemble.iteration, well_models_ready=well_models_ready, finetuning=False)
                         
             # For the remaining iterations we start by applying the analysis and finish by running the forecast
             else:
@@ -161,7 +162,7 @@ class Assimilate:
 
                 if not conv and 'mlacceleration' in self.ensemble.keys_da:
                     if self.ensemble.keys_da['mlacceleration']:
-                        ml_routine(self.ensemble.sim.input_dict['parallel'], self.ensemble.disable_tqdm, self.ensemble.iteration, finetuning=True)
+                        well_models_ready = ml_routine(self.ensemble.sim.input_dict['parallel'], self.ensemble.disable_tqdm, self.ensemble.iteration, well_models_ready=well_models_ready, finetuning=True)
                         
             # if reduction of objective function -> save the state
             if success_iter:

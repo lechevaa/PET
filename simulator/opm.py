@@ -54,6 +54,7 @@ class flow(eclipse):
                 # Save solver informations 
                 com.extend(['--output-extra-convergence-info=steps'])
                 com.extend(['--tolerance-cnv-relaxed=1e-3'])
+                com.extend(['--tolerance-cnv=1e-3'])
                 # com.extend(['--solve-welleq-initially=false'])
                 com.extend(['--linear-solver=cprw'])
                 com.extend(['--initial-time-step-in-days=1.'])
@@ -67,7 +68,9 @@ class flow(eclipse):
                 # com.extend(['--time-step-control-decay-rate=1'])
                 com.extend(['--time-step-control=newtoniterationcount'])
                 com.extend(['--enable-drift-compensation=false'])
-
+                # com.extend(['--relaxed-max-pv-fraction=0.'])
+                com.extend(['--tolerance-mb=1e-7'])
+                com.extend(['--tolerance-mb-relaxed=1e-7'])
                 if 'sim_limit' in self.options:
                     call(com,  stdout=DEVNULL, timeout=self.options['sim_limit'])
                 else:

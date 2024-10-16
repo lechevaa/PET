@@ -43,14 +43,16 @@ def update_well_dict(well_dict, root, sim, grid, well_names):
     WI = WellInfo(grid, rd_sum)
     for well_name in well_names:
         if well_name in  WI.allWellNames():
-            cells_ijk, cells_f = [], []
+            cells_ijk, cells_f, cells_g = [], [], []
             well_state = WI[well_name][0]
             for conn in  well_state.globalConnections():
                 ijk = conn.ijk()
                 f = grid.get_active_index(ijk=conn.ijk())
+                g = grid.global_index(ijk=conn.ijk())
                 cells_ijk.append(ijk)
                 cells_f.append(f)
-            well_dict[well_name] = {'ijk': cells_ijk, 'f': cells_f}
+                cells_g.append(g)
+            well_dict[well_name] = {'ijk': cells_ijk, 'f': cells_f, 'g':cells_g}
     return well_dict
 
 def extract_well_schedule_and_rates(simdata, root, grid, well_names):
@@ -188,6 +190,7 @@ def bfs_extend_neighborhood(well_dict, grid, max_distance):
                         neighborhood.add(neighbor)
         well_neighbors[well]['ijk'] = list(neighborhood)
         well_neighbors[well]['f'] = [grid.get_active_index(ijk=ijk) for ijk in well_neighbors[well]['ijk']]
+        well_neighbors[well]['g'] = [grid.global_index(ijk=ijk) for ijk in well_neighbors[well]['ijk']]
     return well_neighbors
 
 def compute_TOF(root, sim, data_folder, well_mode_dict):
@@ -255,11 +258,8 @@ def main(member):
     #### Case dependant ####
     well_mode_dict = {'INJ':['A5', 'A6'],
             'PROD': ['A1', 'A2', 'A3', 'A4']}
-    # well_mode_dict = {'INJ':[],
-    #         'PROD': ['A2']}
    
     # well_mode_dict = {'INJ': ['INJ1', 'INJ2', 'INJ3'], 'PROD':['PRO1', 'PRO2', 'PRO3']}
-    # well_mode_dict = {'INJ': [], 'PROD':['PRO1']}
     ##### 
 
     well_names = well_mode_dict['INJ'] + well_mode_dict['PROD']

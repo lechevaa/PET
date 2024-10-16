@@ -138,23 +138,29 @@ def plot_solver_report(ml_data_folder:str, figname:str) -> None:
     NewtHist = []
     x_lists = []
     dt_list = []
-    for report in solver_reports:
+    NewtRaw = defaultdict(list)
+    for i, report in enumerate(solver_reports):
         solver_df = pd.read_csv(ml_data_folder + os.sep + report, sep='\t')
         cum_NewtIt.append(np.cumsum(np.array(solver_df['NewtIt'].values, dtype=np.float64)))
         x_lists.append(np.array(solver_df['Time(day)'].values, dtype=np.float64))
         dt_list += list(np.array(solver_df['TStep(day)'].values))
-        NewtHist += list(solver_df['NewtIt'].values)
+        NewtHist+= list(solver_df['NewtIt'].values)
+        NewtRaw[i] = list(solver_df['NewtIt'].values)
     
-    dict_raw = {'NewtIt': NewtHist}
+    dict_raw = {'NewtIt': NewtRaw}
     if not os.path.isfile(f'{ml_data_folder}/{figname}_raw.pkl'):
         with open(f'{ml_data_folder}/{figname}_raw.pkl', 'wb') as f:
             pickle.dump({0 : dict_raw}, f)
     else:
-        with open(f'{ml_data_folder}/{figname}_raw.pkl', 'rb+') as f:
-            NewtDict = pickle.load(f)
-            num_iter = len(NewtDict.keys())
-            pickle.dump({num_iter - 1 : dict_raw}, f)
+        with open(f'{ml_data_folder}/{figname}_raw.pkl', 'rb') as f:
+            dictNewtRaw = pickle.load(f)
             
+        num_iter = len(NewtRaw.keys())
+        dictNewtRaw[num_iter] = dict_raw
+        
+        with open(f'{ml_data_folder}/{figname}_raw.pkl', 'wb') as f:
+            pickle.dump(dictNewtRaw, f)
+
     # 911 is number of days for drogon
     common_x = np.linspace(0, 911, 100)
     interpolated_y_lists = [np.interp(common_x, x, y) for x, y in zip(x_lists, cum_NewtIt)]

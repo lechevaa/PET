@@ -15,7 +15,7 @@ class flow(eclipse):
     simulations, and reading the results.
     """
 
-    def call_sim(self, folder=None, wait_for_proc=False):
+    def call_sim(self, folder=None, wait_for_proc=False, flow_option='flow'):
         """
         Call OPM flow simulator via shell.
 
@@ -43,7 +43,7 @@ class flow(eclipse):
                 com = []
                 if self.options['mpi']:
                     com.extend(self.options['mpi'].split())
-                com.append(self.options['sim_path'] + 'flow')
+                com.append(self.options['sim_path'] + flow_option)
                 if self.options['parsing-strictness']:
                     com.extend(['--parsing-strictness=' + self.options['parsing-strictness']])
                 if 'enable_write_all_solutions' in self.options:
@@ -60,11 +60,11 @@ class flow(eclipse):
                 com.extend(['--initial-time-step-in-days=1.'])
                 com.extend(['--newton-max-iterations=20'])
                 com.extend(['--solver-restart-factor=0.75'])
-                com.extend(['--solver-max-growth=5'])
-                com.extend(['--solver-growth-factor=5'])
+                com.extend(['--solver-max-growth=3'])
+                com.extend(['--solver-growth-factor=2'])
                 com.extend(['--time-step-control-target-newton-iterations=18'])
-                com.extend(['--time-step-control-growth-damping-factor=5'])
-                com.extend(['--time-step-control-growth-rate=5'])
+                com.extend(['--time-step-control-growth-damping-factor=3.2'])
+                com.extend(['--time-step-control-growth-rate=1.25'])
                 # com.extend(['--time-step-control-decay-rate=1'])
                 com.extend(['--time-step-control=newtoniterationcount'])
                 com.extend(['--enable-drift-compensation=false'])

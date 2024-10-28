@@ -1,5 +1,5 @@
+
 import os
-from misc import ecl, grdecl
 import numpy as np
 import datetime as dt
 from collections import deque
@@ -10,14 +10,15 @@ import subprocess as sp
 import csv
 import pandas as pd
 import re
+import shutil
 
 from input_output import read_config
-from misc.preconditioning.figures import plot_tof_hist
 
 from resdata.well import WellInfo
 from resdata.grid import Grid
 from resdata.resfile import ResdataFile
 from resdata.summary import Summary
+
 
 def get_filename(folder:str) -> None:
     base_names = [filename.split('.')[0] for filename in os.listdir(folder)]
@@ -54,25 +55,6 @@ def update_well_dict(well_dict, root, sim, grid, well_names):
                 cells_g.append(g)
             well_dict[well_name] = {'ijk': cells_ijk, 'f': cells_f, 'g':cells_g}
     return well_dict
-
-def extract_well_schedule_and_rates(simdata, root, grid, well_names):
-    well_schedule = defaultdict(list)
-    well_rates = defaultdict(list)
-
-    for sim in simdata:
-        rd_sum = ResdataFile(root + '.' + sim)
-        WI = WellInfo(grid, rd_sum)
-        for well_name in well_names:
-            if well_name in  WI.allWellNames():
-                # schedule
-                well_schedule[well_name].append(True)
-                # rates
-                well_rates[well_name].append(WI[well_name][0].volumeRate())   
-            else:
-                well_schedule[well_name].append(False)
-                well_rates[well_name].append(-np.inf)
-    return well_schedule, well_rates
-
 
 def extract_N_well_schedule_and_rates(simdata, root, grid, well_names, N):
     well_schedule = defaultdict(list)
@@ -121,13 +103,6 @@ def extract_dynamic_props(sim, root, props):
     props_np = np.concatenate(prop_np, axis=2)
     return props_np
 
-def get_initial_date():
-    #### Case dependant ####
-    _, kf = read_config.read_txt('3D_ES.pipt')
-    # _, kf = read_config.read_txt('drogon_1.pipt')
-    ####
-    return datetime.strptime(kf['startdate'], '%m/%d/%Y')
-
 def extract_timetsteps(root):
     rd_sum = Summary(root)
     dates = rd_sum.dates
@@ -144,7 +119,7 @@ def extract_static_props(root:str, props) -> np.array:
     props_np = np.concatenate(prop_np, axis=2)
     return props_np
 
-def extract_solver_props(root:str, data_folder:str, member:int) -> None:
+def extract_solver_props(root:str, ensemble_iter_save_folder:str, member:int ) -> None:
     with open(root + '.INFOSTEP', 'r') as f:
         lines = f.readlines()
     columns_list = lines[0].split()
@@ -157,8 +132,9 @@ def extract_solver_props(root:str, data_folder:str, member:int) -> None:
     df_infostep = pd.DataFrame(data, columns=columns_list)
     df_infostep_ = df_infostep[['Time(day)' , 'TStep(day)', 'NewtIt']]
 
-    df_infostep_.to_csv(data_folder + os.sep + 'solver_report_' + str(member) + '.csv', sep='\t')
-    return 
+    
+    df_infostep_.to_csv(ensemble_iter_save_folder + os.sep + 'solver_report_' + str(member) + '.csv', sep='\t')
+    return  
 
 def bfs_extend_neighborhood(well_dict, grid, max_distance):
     nx, ny, nz = grid.nx, grid.ny, grid.nz
@@ -193,51 +169,6 @@ def bfs_extend_neighborhood(well_dict, grid, max_distance):
         well_neighbors[well]['g'] = [grid.global_index(ijk=ijk) for ijk in well_neighbors[well]['ijk']]
     return well_neighbors
 
-def compute_TOF(root, sim, data_folder, well_mode_dict):
-    def convert_string(s):
-        while s and not s[0].isdigit():
-            s = s[1:]
-        return str(int(s))
-    step = convert_string(sim)
-    # Run Time Of Flight computation
-    os.chdir(data_folder)
-    os.makedirs('ToF', exist_ok=True)
-    os.chdir('ToF')
-    command  = ['OPM-ToF']
-    args = [f'case=../../{root}', f'step={step}']
-    cmd = command + args
-    sp.run(cmd, check=True, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
-    os.chdir('../..')
-
-    def parse_file_to_dict(file_path):
-        data_dict = {}
-        with open(file_path, 'r') as file:
-            for line in file:
-                parts = line.split()
-                data_dict[int(parts[0])] = float(parts[1])
-        return data_dict
-    
-    tof_filenames = {}
-    tof_dict = {}
-    for filename in os.listdir(data_folder + '/ToF'):
-        if len(filename.split('.')) == 2:
-            name, ext = filename.split('.')
-            if ext == 'out':
-                prop, mode, well_name = name.split('-')
-                if well_name in well_mode_dict[mode.upper()] and prop == 'tof':
-                    tof_filenames[well_name] = filename
-                    tof_dict[well_name] = parse_file_to_dict(data_folder + os.sep + 'ToF' + os.sep + filename)
-    return tof_dict
-
-def compute_TOF_local_domain(tof_dict, threshold):
-    # Threshold in number of cells
-    well_neighbors = defaultdict(dict)
-    for well in tof_dict.keys():
-        sorted_tof = sorted(tof_dict[well].items(), key=lambda item: item[1])
-        filtered_tof = [item[0] for item in sorted_tof[:threshold]]
-        well_neighbors[well]['f'] = filtered_tof
-    return well_neighbors
-
 def save_dict_to_csv(well_dict, savepath) -> None:
     for well_name, cells in well_dict.items():
         with open(savepath + os.sep + f'{well_name}_local_domain.csv', 'w') as csv_file:
@@ -245,27 +176,31 @@ def save_dict_to_csv(well_dict, savepath) -> None:
             writer.writerow([well_name, cells['f']])
     return 
 
+def clean_folder(folder_path):
+    shutil.rmtree(folder_path)
+    return 
 
-def main(member):
+def dataset_preparation(member, en_i):
     ml_data_folder = 'En_ml_data'
-    os.makedirs(ml_data_folder, exist_ok=True)
-
+    ensemble_iter_folder = 'En_iter'
     folder = 'En_' + str(member) + os.sep
     filename = get_filename(folder)
     _, simdata, _ = get_extensions(folder)
     root = folder + os.sep + filename
 
-    #### Case dependant ####
     well_mode_dict = {'INJ':['A5', 'A6'],
             'PROD': ['A1', 'A2', 'A3', 'A4']}
-   
+
+    
     # well_mode_dict = {'INJ': ['INJ1', 'INJ2', 'INJ3'], 'PROD':['PRO1', 'PRO2', 'PRO3']}
-    ##### 
 
     well_names = well_mode_dict['INJ'] + well_mode_dict['PROD']
 
     # Extract solver props
-    extract_solver_props(root, ml_data_folder, member)
+    ensemble_iter_save_folder = ml_data_folder + os.sep + ensemble_iter_folder + f"_{en_i}"
+    os.makedirs(ensemble_iter_save_folder + os.sep + 'hybrid_newton', exist_ok=True)
+    extract_solver_props(root, ensemble_iter_save_folder + os.sep + 'hybrid_newton', member)
+
     # Extract timesteps
     dts = extract_timetsteps(root)
     # Extract all well cells
@@ -280,23 +215,14 @@ def main(member):
                 pickle.dump(well_dict, f)
             break
     
-
     # Compute local well domain
-    mode = 'NotToF'
     max_distance = 2
     if os.path.isfile(ml_data_folder + os.sep + f'well_dict_local.pkl'):
         well_local_domains = pickle.load(open(ml_data_folder + os.sep + f'well_dict_local.pkl', 'rb'))
     else:
-        # need to compute ToF local domain but care parallelisation
         # first arrived member computes for all
-        if mode == 'ToF':
-            # Using Time of Flight
-            tof_dict = compute_TOF(root, simdata[-1], ml_data_folder, well_mode_dict)
-            plot_tof_hist(tof_dict, savepath=ml_data_folder + '/ToF')
-            well_local_domains = compute_TOF_local_domain(tof_dict, threshold=max_distance)
-        else:
-            # Using arbitrary distance
-            well_local_domains = bfs_extend_neighborhood(well_dict, grid, max_distance=max_distance)
+        # Using arbitrary distance
+        well_local_domains = bfs_extend_neighborhood(well_dict, grid, max_distance=max_distance)
         
         # before saving, other members may have gone through the if statement too, check again
         if not os.path.isfile(ml_data_folder + os.sep + f'well_dict_local.pkl'):
@@ -358,5 +284,8 @@ def main(member):
                     np.savez(well_ensemble_folder + os.sep + str(i), stat_props=stat_props_np[:, well_local_domains[well_name]['f'],:], 
                         dyn_props_X=well_dyn_props[well_name]['X'], dyn_props_Y=well_dyn_props[well_name]['Y'], 
                         dt=well_dyn_props[well_name]['dt'], RESV=well_dyn_props[well_name]['RESV'])
-                
+                    
+    clean_folder(folder_path=folder)
+                    
+    
                     

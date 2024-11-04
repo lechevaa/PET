@@ -1094,7 +1094,8 @@ class ecl_300(eclipse):
         Wait_for_proc : bool, optional
             Logical variable to wait for the simulator to finish. Default is False.
 
-        NOTE: For now, this option is only utilized in a single localization option.
+        !!! note
+            For now, this option is only utilized in a single localization option.
 
         Returns
         -------

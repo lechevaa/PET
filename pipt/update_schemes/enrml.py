@@ -58,7 +58,7 @@ class lmenrmlMixIn(Ensemble):
 
         Parameters
         ----------
-        init_file: str
+        init_file : str
             PIPT init. file containing info. to run the inversion algorithm
         """
         # Pass the init_file upwards in the hierarchy
@@ -318,7 +318,7 @@ class gnenrmlMixIn(Ensemble):
 
         Parameters
         ----------
-        init_file: str
+        init_file : str
             PIPT init. file containing info. to run the inversion algorithm
         """
         # Pass the init_file upwards in the hierarchy
@@ -675,7 +675,7 @@ class co_lm_enrml(lmenrmlMixIn, approx_update):
 
         Parameters
         ----------
-        init_file: str
+        init_file : str
             PIPT init. file containing info. to run the inversion algorithm
 
         References
@@ -692,12 +692,12 @@ class co_lm_enrml(lmenrmlMixIn, approx_update):
 
         Parameters
         ----------
-        iteration: int
+        iteration : int
             Iteration number
 
         Returns
         -------
-        success: bool
+        success : bool
             True if data mismatch is decreasing, False if increasing
 
         References
@@ -829,7 +829,7 @@ class gn_enrml(lmenrmlMixIn):
 
         Parameters
         ----------
-        init_file: str
+        init_file : str
             PIPT init. file containing info. to run the inversion algorithm
 
         References

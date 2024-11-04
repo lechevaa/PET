@@ -218,7 +218,7 @@ class eclipse:
         """
         Setup the simulator.
 
-        Parameters
+        Attributes
         ----------
         assimIndex : int
             Gives the index-type (e.g. step,time,etc.) and the index for the
@@ -361,7 +361,7 @@ class eclipse:
 
         Parameters
         ----------
-        Folder : str, optional
+        folder : str, optional
             Path to the ecl_100 run folder.
 
         ensembleMember : int, optional
@@ -797,21 +797,15 @@ class eclipse:
 
         Parameters
         ----------
-        file_rsm : str
-            Summary file from ECL 100.
-
-        file_rst : str
-            Restart file from ECL 100.
-
         whichResponse : str
             Which of the responses is to be outputted (e.g., WBHP PRO-1, WOPR, PRESS, OILSAT, etc).
-
-        member : int, optional
-            Ensemble member that is finished.
 
         ext_data_info : tuple, optional
             Tuple containing the assimilation step information, including the place of assimilation (e.g., which TIME) and the
             index of this assimilation place.
+
+        member : int, optional
+            Ensemble member that is finished.
 
         Returns
         -------
@@ -1029,10 +1023,10 @@ class ecl_100(eclipse):
 
         Parameters
         ----------
-        Path : str
+        path : str
             Alternative folder for the ecl_100.data file.
 
-        Wait_for_proc : bool, optional
+        wait_for_proc : bool, optional
             Logical variable to wait for the simulator to finish. Default is False.
 
         Returns
@@ -1088,14 +1082,14 @@ class ecl_300(eclipse):
 
         Parameters
         ----------
-        Path : str
+        path : str
             Alternative folder for the ecl_100.data file.
 
-        Wait_for_proc : bool, optional
+        wait_for_proc : bool, optional
             Logical variable to wait for the simulator to finish. Default is False.
 
-        !!! note
-            For now, this option is only utilized in a single localization option.
+            !!! note
+                For now, this option is only utilized in a single localization option.
 
         Returns
         -------

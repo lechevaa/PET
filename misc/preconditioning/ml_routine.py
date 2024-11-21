@@ -2,6 +2,7 @@ import os
 from p_tqdm import p_map
 from functools import partial
 from typing import List
+import random 
 
 import pickle
 import numpy as np
@@ -153,7 +154,7 @@ def fit_well_model_kerasify(X_train, Y_train, n_cells, n_features, well_name, ml
         model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
                       loss=relative_root_mean_squared_error
                       )
-        epochs = 400
+        epochs = 1000
     else:
         model = load_model(os.path.join(ml_model_folder, f'{well_name}_kerasify.keras'), 
                             custom_objects={'relative_root_mean_squared_error':relative_root_mean_squared_error}
@@ -161,7 +162,7 @@ def fit_well_model_kerasify(X_train, Y_train, n_cells, n_features, well_name, ml
         model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
                       loss=relative_root_mean_squared_error
                       )
-        epochs = 200
+        epochs = 500
 
 
     model_path = os.path.join(ml_model_folder, f'{well_name}_kerasify.keras')
@@ -192,6 +193,11 @@ def fit_well_model_kerasify(X_train, Y_train, n_cells, n_features, well_name, ml
     return (well_name, loss_hist)
 
 def well_ml_routine(well_name, data_folder, ml_model_folder, finetuning):
+    # Set seed for repoducibility 
+    random.seed(42)
+    np.random.seed(42)
+    tf.random.set_seed(42)
+    
     os.makedirs(ml_model_folder, exist_ok=True)
     X, Y, dts, resvs = [], [], [], []
     paths = os.listdir(data_folder + os.sep + well_name)
@@ -238,7 +244,7 @@ def well_ml_routine(well_name, data_folder, ml_model_folder, finetuning):
     return (well_name, loss_hist)
 
 
-def ml_routine(n_proc, i, well_models_ready, finetuning) -> List[str]:
+def ml_routine(n_proc, i, well_models_ready, finetuning, epsilon) -> List[str]:
     data_folder = 'En_ml_data'
     well_names = [item for item in os.listdir(data_folder) if os.path.isdir(os.path.join(data_folder, item)) and not item.startswith('En_iter')] 
     ml_model_folder = 'En_ml_models'
@@ -248,7 +254,7 @@ def ml_routine(n_proc, i, well_models_ready, finetuning) -> List[str]:
     en_hist_dict = {i : dict(histories)}
     plot_loss(en_hist_dict, figname='well_loss', ml_model_folder=ml_model_folder, finetuning=finetuning)
 
-    partial_quality_plots = partial(quality_plots, figname='quality_plots', ml_model_folder=ml_model_folder, epsilon=0.5)
+    partial_quality_plots = partial(quality_plots, figname='quality_plots', ml_model_folder=ml_model_folder, epsilon=epsilon)
     well_models_ready = p_map(partial_quality_plots, well_names, num_cpus=min(len(well_names), n_proc))
     well_models_ready_to_json(ml_model_folder, well_models_ready)
     return well_models_ready

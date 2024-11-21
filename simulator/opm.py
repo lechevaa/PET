@@ -52,6 +52,7 @@ class flow(eclipse):
                 com.extend(['--output-dir=' + folder, *
                            self.options['sim_flag'].split(), filename + '.DATA'])
                 # Save solver informations 
+                # com.extend(['--full-time-step-initially=true'])
                 com.extend(['--output-extra-convergence-info=steps'])
                 com.extend(['--tolerance-cnv-relaxed=1e-3'])
                 com.extend(['--tolerance-cnv=1e-3'])

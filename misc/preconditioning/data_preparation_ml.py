@@ -11,6 +11,7 @@ import csv
 import pandas as pd
 import re
 import shutil
+import time 
 
 from input_output import read_config
 
@@ -120,6 +121,13 @@ def extract_static_props(root:str, props) -> np.array:
     return props_np
 
 def extract_solver_props(root:str, ensemble_iter_save_folder:str, member:int ) -> None:
+    for attempt in range(1, 4):
+        if os.path.exists(root + '.INFOSTEP'):
+            break
+        time.sleep(10)
+        if attempt == 3:
+            print(f"{root} not found, OPM save issue or server lag.")
+        return 
     with open(root + '.INFOSTEP', 'r') as f:
         lines = f.readlines()
     columns_list = lines[0].split()
@@ -180,19 +188,13 @@ def clean_folder(folder_path):
     shutil.rmtree(folder_path)
     return 
 
-def dataset_preparation(member, en_i):
+def dataset_preparation(member, en_i, well_mode_dict):
     ml_data_folder = 'En_ml_data'
     ensemble_iter_folder = 'En_iter'
     folder = 'En_' + str(member) + os.sep
     filename = get_filename(folder)
     _, simdata, _ = get_extensions(folder)
     root = folder + os.sep + filename
-
-    well_mode_dict = {'INJ':['A5', 'A6'],
-            'PROD': ['A1', 'A2', 'A3', 'A4']}
-
-    
-    # well_mode_dict = {'INJ': ['INJ1', 'INJ2', 'INJ3'], 'PROD':['PRO1', 'PRO2', 'PRO3']}
 
     well_names = well_mode_dict['INJ'] + well_mode_dict['PROD']
 

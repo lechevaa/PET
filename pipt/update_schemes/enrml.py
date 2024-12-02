@@ -18,6 +18,8 @@ import importlib.util
 
 import importlib.util
 
+import importlib.util
+
 # List all available packages in the namespace package
 # Import those that are present
 import pipt.update_schemes.update_methods_ns as ns_pkg

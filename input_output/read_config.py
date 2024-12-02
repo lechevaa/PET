@@ -130,7 +130,7 @@ def read_txt(init_file):
 
     Parameters
     ----------
-    init_file: str
+    init_file : str
         PIPT init. file containing info. to run the inversion algorithm
 
     Returns
@@ -197,12 +197,12 @@ def read_clean_file(init_file):
 
     Parameters
     ----------
-    init_file: str
+    init_file : str
         Name of file to remove all comments. WHOLE filename needed (with suffix!)
 
     Returns
     -------
-    lines: list
+    lines : list
         Lines from init. file converted to list entries
     """
     # Read file except lines starting with an octothorpe (#) and return the python variable
@@ -219,12 +219,12 @@ def remove_empty_lines(lines):
 
     Parameters
     ----------
-    lines: list
+    lines : list
         List of lines from a file
 
     Returns
     -------
-    lines_clean: list
+    lines_clean : list
         List of clean lines (without empty entries)
     """
     # Loop over lines to find '\n'
@@ -254,12 +254,12 @@ def parse_keywords(lines):
 
     Parameters
     ----------
-    lines: list
+    lines : list
         List of (clean) lines from the PIPT init. file.
 
     Returns
     -------
-    keys: dict
+    keys : dict
         Dictionary with all info. from the init. file.
     """
     # Init. the dictionary
@@ -354,16 +354,11 @@ def check_mand_keywords_da(keys_da):
     """Check for mandatory keywords in `DATAASSIM` part, and output error if they are not present"""
 
     # Mandatory keywords in DATAASSIM
-    assert 'ne' in keys_da, 'NE not in DATAASSIM!'
     assert 'truedataindex' in keys_da, 'TRUEDATAINDEX not in DATAASSIM!'
     assert 'assimindex' in keys_da, 'ASSIMINDEX not in DATAASSIM!'
     assert 'truedata' in keys_da, 'TRUEDATA not in DATAASSIM!'
-    assert 'state' in keys_da, 'STATE not in DATAASSIM!'
     assert 'datavar' in keys_da, 'DATAVAR not in DATAASSIM!'
     assert 'obsname' in keys_da, 'OBSNAME not in DATAASSIM!'
-    if 'importstaticvar' not in keys_da:
-        assert filter(list(keys_da.keys()),
-                      'prior_*') != [], 'No PRIOR_<STATICVAR> in DATAASSIM'
     assert 'energy' in keys_da, 'ENERGY not in DATAASSIM!'
 
 
@@ -378,7 +373,9 @@ def check_mand_keywords_en(keys_en):
     # Mandatory keywords in ENSEMBLE
     assert 'ne' in keys_en, 'NE not in ENSEMBLE!'
     assert 'state' in keys_en, 'STATE not in ENSEMBLE!'
-
+    if 'importstaticvar' not in keys_en:
+        assert filter(list(keys_en.keys()),
+                      'prior_*') != [], 'No PRIOR_<STATICVAR> in DATAASSIM'
 
 def change_file_extension(filename, new_extension):
     if '.' in filename:

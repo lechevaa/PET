@@ -5,10 +5,10 @@ EnKF type schemes
 import numpy as np
 from scipy.linalg import solve
 from copy import deepcopy
+from geostat.decomp import Cholesky                     # Making realizations
 
 # Internal imports
 from pipt.loop.ensemble import Ensemble
-from pipt.geostat.decomp import Cholesky                     # Making realizations
 # Misc. tools used in analysis schemes
 from pipt.misc_tools import analysis_tools as at
 
@@ -27,12 +27,6 @@ class enkfMixIn(Ensemble):
         """
         The class is initialized by passing the PIPT init. file upwards in the hierarchy to be read and parsed in
         `pipt.input_output.pipt_init.ReadInitFile`.
-
-        Parameters
-        ----------
-        init_file: str
-            PIPT init. file containing info. to run the inversion algorithm
-
         """
         # Pass the init_file upwards in the hierarchy
         super().__init__(keys_da, keys_fwd, sim)

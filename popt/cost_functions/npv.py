@@ -2,7 +2,7 @@
 import numpy as np
 
 
-def npv(pred_data, keys_opt, report):
+def npv(pred_data, **kwargs):
     """
     Net present value cost function
 
@@ -11,24 +11,31 @@ def npv(pred_data, keys_opt, report):
     pred_data : array_like
         Ensemble of predicted data.
 
-    keys_opt : list
-        Keys with economic data.
+    **kwargs : dict
+        Other arguments sent to the npv function
 
-            - wop: oil price
-            - wgp: gas price
-            - wwp: water production cost
-            - wwi: water injection cost
-            - disc: discount factor
-            - obj_scaling: used to scale the objective function (negative since all methods are minimizers)
+        keys_opt : list
+            Keys with economic data.
 
-    report : list
-        Report dates.
+                - wop: oil price
+                - wgp: gas price
+                - wwp: water production cost
+                - wwi: water injection cost
+                - disc: discount factor
+                - obj_scaling: used to scale the objective function (negative since all methods are minimizers)
+
+        report : list
+            Report dates.
 
     Returns
     -------
     objective_values : numpy.ndarray
         Objective function values (NPV) for all ensemble members.
     """
+
+    # Get the necessary input
+    keys_opt = kwargs.get('input_dict',{})
+    report = kwargs.get('true_order', [])
 
     # Economic values
     npv_const = {}
@@ -42,7 +49,7 @@ def npv(pred_data, keys_opt, report):
         Qgp = np.squeeze(pred_data[i]['fgpt']) - np.squeeze(pred_data[i - 1]['fgpt'])
         Qwp = np.squeeze(pred_data[i]['fwpt']) - np.squeeze(pred_data[i - 1]['fwpt'])
         Qwi = np.squeeze(pred_data[i]['fwit']) - np.squeeze(pred_data[i - 1]['fwit'])
-        delta_days = (report[1][i] - report[1][i - 1]).days
+        delta_days = (report[1][i] - report[1][0]).days
 
         val = (Qop * npv_const['wop'] + Qgp * npv_const['wgp'] - Qwp * npv_const['wwp'] - Qwi * npv_const['wwi']) / (
             (1 + npv_const['disc']) ** (delta_days / 365))

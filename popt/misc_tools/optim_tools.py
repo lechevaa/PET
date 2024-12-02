@@ -14,13 +14,17 @@ def aug_optim_state(state, list_state):
     """
     Augment the state variables to get one augmented array.
 
-    Input:
-            - state:                Dictionary of state variable for optimization. OBS: 1D arrays!
-            - list_state:           Fixed list of keys in state dict.
+    Parameters
+    ----------
+    state : dict
+        Dictionary of state variables for optimization. OBS: 1D arrays!
+    list_state : list
+        Fixed list of keys in the state dictionary.
 
-    Output:
-            - aug_state:            Augmented 1D array of state variables.
-
+    Returns
+    -------
+    aug_state : numpy.ndarray
+        Augmented 1D array of state variables.
     """
     # Start with ensemble of first state variable
     aug = state[list_state[0]]
@@ -35,17 +39,23 @@ def aug_optim_state(state, list_state):
 
 def update_optim_state(aug_state, state, list_state):
     """
-    Extract the separate state variables from an augmented state array. It is assumed that the augmented state
-    array is made in aug_optim_state method, hence this is the reverse method.
+    Extract the separate state variables from an augmented state array.
 
-    Input:
-            - aug_state:                Augmented state array. OBS: 1D array.
-            - state:                    Dictionary of state variable for optimization.
-            - list_state:               Fixed list of keys in state dict.
+    It is assumed that the augmented state array is made in the aug_optim_state method, hence this is the reverse method.
 
-    Output:
-            - state:                    State dictionary updated with aug_state.
+    Parameters
+    ----------
+    aug_state : numpy.ndarray
+        Augmented state array. OBS: 1D array.
+    state : dict
+        Dictionary of state variables for optimization.
+    list_state : list
+        Fixed list of keys in the state dictionary.
 
+    Returns
+    -------
+    state : dict
+        State dictionary updated with aug_state.
     """
 
     # Loop over all entries in list_state and extract an array with same number of rows as the key in state
@@ -99,9 +109,8 @@ def time_correlation(a, state, n_timesteps, dt=1.0):
     Constructs correlation matrix with time correlation
     using an autoregressive model.
 
-    .. math::
-        Corr(t_1, t_2) = a^{|t_1 - t_2|}
-    
+    $$ Corr(t_1, t_2) = a^{|t_1 - t_2|} $$
+
     Assumes that each varaible in state is time-order such that
     `x = [x1, x2,..., xi,..., xn]`, where `i` is the time index, 
     and `xi` is d-dimensional.
@@ -230,7 +239,8 @@ def clip_state(x, bounds):
         The state after truncation
     """
 
-    if bounds is not None:
+    any_not_none = any(any(item) for item in bounds)
+    if any_not_none:
         lb = np.array(bounds)[:, 0]
         lb = np.where(lb is None, -np.inf, lb)
         ub = np.array(bounds)[:, 1]
@@ -257,6 +267,9 @@ def get_optimize_result(obj):
     # Initialize dictionary of variables to save
     save_dict = OptimizeResult({'success': True, 'x': obj.mean_state, 'fun': np.mean(obj.obj_func_values),
                                 'nit':  obj.iteration, 'nfev': obj.nfev, 'njev': obj.njev})
+    if hasattr(obj, 'epf') and obj.epf:
+        save_dict['epf_iteration'] = obj.epf_iteration
+
     if 'savedata' in obj.options:
 
         # Make sure "SAVEDATA" gives a list
@@ -264,7 +277,7 @@ def get_optimize_result(obj):
             savedata = obj.options['savedata']
         else:
             savedata = [ obj.options['savedata']]
-
+      
         # Loop over variables to store in save list
         for save_typ in savedata:
             if 'mean_state' in save_typ:
@@ -310,4 +323,7 @@ def save_optimize_results(intermediate_result):
         suffix = now.strftime("%m_%d_%Y_%H_%M_%S")
 
     # Save the variables
-    np.savez(save_folder + '/optimize_result_{0}'.format(suffix), **intermediate_result)
+    if 'epf_iteration' in intermediate_result:
+        np.savez(save_folder + '/optimize_result_{0}_{1}'.format(suffix, str(intermediate_result['epf_iteration'])), **intermediate_result)
+    else:
+        np.savez(save_folder + '/optimize_result_{0}'.format(suffix), **intermediate_result)

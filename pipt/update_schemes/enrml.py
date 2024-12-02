@@ -3,7 +3,7 @@ EnRML type schemes
 """
 # External imports
 import pipt.misc_tools.analysis_tools as at
-from pipt.geostat.decomp import Cholesky
+from geostat.decomp import Cholesky
 from pipt.loop.ensemble import Ensemble
 from pipt.update_schemes.update_methods_ns.subspace_update import subspace_update
 from pipt.update_schemes.update_methods_ns.full_update import full_update
@@ -15,13 +15,17 @@ import numpy as np
 import copy as cp
 from scipy.linalg import cholesky, solve
 
+import importlib.util
+
 # List all available packages in the namespace package
 # Import those that are present
 import pipt.update_schemes.update_methods_ns as ns_pkg
 tot_ns_pkg = []
 # extract all class methods from namespace
 for finder, name, ispkg in pkgutil.walk_packages(ns_pkg.__path__):
-    _module = finder.find_module(name).load_module(f'{name}')
+    spec = finder.find_spec(name)
+    _module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(_module)
     tot_ns_pkg.extend(inspect.getmembers(_module, inspect.isclass))
 
 # import standard libraries
@@ -46,11 +50,6 @@ class lmenrmlMixIn(Ensemble):
         """
         The class is initialized by passing the PIPT init. file upwards in the hierarchy to be read and parsed in
         `pipt.input_output.pipt_init.ReadInitFile`.
-
-        Parameters
-        ----------
-        init_file: str
-            PIPT init. file containing info. to run the inversion algorithm
         """
         # Pass the init_file upwards in the hierarchy
         super().__init__(keys_da, keys_fwd, sim)
@@ -306,11 +305,6 @@ class gnenrmlMixIn(Ensemble):
         """
         The class is initialized by passing the PIPT init. file upwards in the hierarchy to be read and parsed in
         `pipt.input_output.pipt_init.ReadInitFile`.
-
-        Parameters
-        ----------
-        init_file: str
-            PIPT init. file containing info. to run the inversion algorithm
         """
         # Pass the init_file upwards in the hierarchy
         super().__init__(keys_da, keys_fwd, sim)
@@ -651,7 +645,7 @@ class gnenrml_margis(gnenrmlMixIn, margIS_update):
 
 class co_lm_enrml(lmenrmlMixIn, approx_update):
     """
-    This is the implementation of the approximative LM-EnRML algorithm as described in [1].
+    This is the implementation of the approximative LM-EnRML algorithm as described in [`chen2013`][].
 
     This algorithm is quite similar to the lm_enrml as provided above, and will therefore inherit most of its methods.
     We only change the calc_analysis part...
@@ -663,16 +657,6 @@ class co_lm_enrml(lmenrmlMixIn, approx_update):
         """
         The class is initialized by passing the PIPT init. file upwards in the hierarchy to be read and parsed in
         `pipt.input_output.pipt_init.ReadInitFile`.
-
-        Parameters
-        ----------
-        init_file: str
-            PIPT init. file containing info. to run the inversion algorithm
-
-        References
-        ----------
-        [1] Chen Y. & Oliver D.S. 2013, Levenberg-Marquardt Forms of the Iterative Ensemble Smoother for Efficient
-        History Matching and Uncertainty Quantification. Comput. Geosci., 17 (4): 689-703
         """
         # Call __init__ in parent class
         super().__init__(keys_da)
@@ -681,20 +665,15 @@ class co_lm_enrml(lmenrmlMixIn, approx_update):
         """
         Calculate the update step in approximate LM-EnRML code.
 
-        Parameters
+        Attributes
         ----------
-        iteration: int
+        iteration : int
             Iteration number
 
         Returns
         -------
-        success: bool
+        success : bool
             True if data mismatch is decreasing, False if increasing
-
-        References
-        ----------  
-        [1] Chen Y. & Oliver D.S. 2013, Levenberg-Marquardt Forms of the Iterative Ensemble Smoother for Efficient
-        History Matching and Uncertainty Quantification. Comput. Geosci., 17 (4): 689-703
         """
         # Get assimilation order as a list
         self.assim_index = [self.keys_da['obsname'], self.keys_da['assimindex'][0]]
@@ -806,8 +785,10 @@ class co_lm_enrml(lmenrmlMixIn, approx_update):
 
 class gn_enrml(lmenrmlMixIn):
     """
-    This is the implementation of the stochastig IES as  described in [1]. More information about the method is found in
-    [2]. This implementation is the Gauss-Newton version.
+    This is the implementation of the stochastig IES as  described in [`raanes2019`][].
+
+    More information about the method is found in [`evensen2019`][].
+    This implementation is the Gauss-Newton version.
 
     This algorithm is quite similar to the `lm_enrml` as provided above, and will therefore inherit most of its methods.
     We only change the calc_analysis part...
@@ -817,19 +798,6 @@ class gn_enrml(lmenrmlMixIn):
         """
         The class is initialized by passing the PIPT init. file upwards in the hierarchy to be read and parsed in
         `pipt.input_output.pipt_init.ReadInitFile`.
-
-        Parameters
-        ----------
-        init_file: str
-            PIPT init. file containing info. to run the inversion algorithm
-
-        References
-        ----------
-        [1] Raanes, P. N., Stordal, A. S., & Evensen, G. (2019). Revising the stochastic iterative ensemble smoother.
-        Nonlinear Processes in Geophysics, 26(3), 325-338. https://doi.org/10.5194/npg-26-325-2019 <br>
-        [2] Evensen, G., Raanes, P. N., Stordal, A. S., & Hove, J. (2019). Efficient Implementation of an Iterative
-        Ensemble Smoother for Data Assimilation and Reservoir History Matching. Frontiers in Applied Mathematics and
-        Statistics, 5(October), 114. https://doi.org/10.3389/fams.2019.00047
         """
         # Call __init__ in parent class
         super().__init__(keys_da)
@@ -1000,17 +968,6 @@ class gn_enrml(lmenrmlMixIn):
         """
         Check if GN-EnRML have converged based on evaluation of change sizes of objective function, state and damping
         parameter. Very similar to original function, but exit if there is no reduction in obj. function.
-
-        Parameters
-        ----------
-        prev_data_misfit : float
-            Data misfit calculated from the previous update.
-
-        step : float
-            Step size.
-
-        lam : float
-            LM damping parameter.
 
         Returns
         -------

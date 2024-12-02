@@ -1,3 +1,4 @@
+"""Ensemble optimisation algorithm."""
 # External imports
 import numpy as np
 from numpy import linalg as la
@@ -15,11 +16,10 @@ class EnOpt(Optimize):
     This is an implementation of the ensemble steepest descent ensemble optimization algorithm - EnOpt.
     The update of the control variable is done with the simple steepest (or gradient) descent algorithm:
 
-    .. math::
-        x_l = x_{l-1} - \alpha \times C \times G
+    $$ x_l = x_{l-1} - \alpha \times C \times G $$
 
-    where :math:`x` is the control variable, :math:`l` is the iteration index, :math:`\alpha` is the step size,
-    :math:`C` is a smoothing matrix (e.g., covariance matrix for :math:`x`), and :math:`G` is the ensemble gradient.
+    where $x$ is the control variable, $l$ is the iteration index, $\alpha$ is the step size,
+    $C$ is a smoothing matrix (e.g., covariance matrix for $x$), and $G$ is the ensemble gradient.
 
     Methods
     -------
@@ -36,43 +36,43 @@ class EnOpt(Optimize):
         """
         Parameters
         ----------
-        fun: callable
+        fun : callable
             objective function
 
-        x: ndarray
+        x : ndarray
             Initial state
 
-        args: tuple
+        args : tuple
             Initial covariance
 
-        jac: callable
+        jac : callable
             Gradient function
 
-        hess: callable
+        hess : callable
             Hessian function
 
-        bounds: list, optional
+        bounds : list, optional
             (min, max) pairs for each element in x. None is used to specify no bound.
 
-        options: dict
+        options : dict
             Optimization options
 
-                - maxiter: maximum number of iterations (default 10)
-                - restart: restart optimization from a restart file (default false)
-                - restartsave: save a restart file after each successful iteration (defalut false)
-                - tol: convergence tolerance for the objective function (default 1e-6)
-                - alpha: step size for the steepest decent method (default 0.1)
-                - beta: momentum coefficient for running accelerated optimization (default 0.0)
-                - alpha_maxiter: maximum number of backtracing trials (default 5)
-                - resample: number indicating how many times resampling is tried if no improvement is found
-                - optimizer: 'GA' (gradient accent) or Adam (default 'GA')
-                - nesterov: use Nesterov acceleration if true (default false)
-                - hessian: use Hessian approximation (if the algorithm permits use of Hessian) (default false)
-                - normalize: normalize the gradient if true (default true)
-                - cov_factor: factor used to shrink the covariance for each resampling trial (defalut 0.5)
-                - savedata: specify which class variables to save to the result files (state, objective
-                            function value, iteration number, number of function evaluations, and number
-                            of gradient evaluations, are always saved)
+            - maxiter: maximum number of iterations (default 10)
+            - restart: restart optimization from a restart file (default false)
+            - restartsave: save a restart file after each successful iteration (defalut false)
+            - tol: convergence tolerance for the objective function (default 1e-6)
+            - alpha: step size for the steepest decent method (default 0.1)
+            - beta: momentum coefficient for running accelerated optimization (default 0.0)
+            - alpha_maxiter: maximum number of backtracing trials (default 5)
+            - resample: number indicating how many times resampling is tried if no improvement is found
+            - optimizer: 'GA' (gradient accent) or Adam (default 'GA')
+            - nesterov: use Nesterov acceleration if true (default false)
+            - hessian: use Hessian approximation (if the algorithm permits use of Hessian) (default false)
+            - normalize: normalize the gradient if true (default true)
+            - cov_factor: factor used to shrink the covariance for each resampling trial (defalut 0.5)
+            - savedata: specify which class variables to save to the result files (state, objective
+                        function value, iteration number, number of function evaluations, and number
+                        of gradient evaluations, are always saved)
         """
 
         # init PETEnsemble
@@ -112,11 +112,12 @@ class EnOpt(Optimize):
         # Calculate objective function of startpoint
         if not self.restart:
             self.start_time = time.perf_counter()
-            self.obj_func_values = self.fun(self.mean_state)
+            self.obj_func_values = self.fun(self.mean_state, **self.epf)
             self.nfev += 1
             self.optimize_result = ot.get_optimize_result(self)
             ot.save_optimize_results(self.optimize_result)
             if self.logger is not None:
+                self.logger.info('\n\n')
                 self.logger.info('       ====== Running optimization - EnOpt ======')
                 self.logger.info('\n'+pprint.pformat(self.options))
                 info_str = '       {:<10} {:<10} {:<15} {:<15} {:<15} '.format('iter', 'alpha_iter',
@@ -133,6 +134,8 @@ class EnOpt(Optimize):
         elif optimizer == 'AdaMax':
             self.normalize = False
             self.optimizer = opt.AdaMax(self.alpha, self.beta)
+        elif optimizer == 'Steihaug':
+            self.optimizer = opt.Steihaug(delta0=3.0)
 
         # The EnOpt class self-ignites, and it is possible to send the EnOpt class as a callale method to scipy.minimize
         self.run_loop()  # run_loop resides in the Optimization class (super)
@@ -155,9 +158,9 @@ class EnOpt(Optimize):
             # Calculate gradient
             if self.nesterov:
                 gradient = self.jac(self.mean_state + self.beta*self.state_step,
-                                    shrink*(self.cov + self.beta*self.cov_step))
+                                    shrink*(self.cov + self.beta*self.cov_step), **self.epf)
             else:
-                gradient = self.jac(self.mean_state, shrink*self.cov)
+                gradient = self.jac(self.mean_state, shrink*self.cov, **self.epf)
             self.njev += 1
 
             # Compute the hessian
@@ -176,11 +179,12 @@ class EnOpt(Optimize):
 
             while improvement is False:  # backtracking loop
 
-                new_state, new_step = self.optimizer.apply_update(self.mean_state, gradient, iter=self.iteration)
+                new_state, new_step = self.optimizer.apply_update(self.mean_state, gradient,
+                                                                  hessian=hessian, iter=self.iteration)
                 new_state = ot.clip_state(new_state, self.bounds)
 
                 # Calculate new objective function
-                new_func_values = self.fun(new_state)
+                new_func_values = self.fun(new_state, **self.epf)
                 self.nfev += 1
 
                 if np.mean(self.obj_func_values) - np.mean(new_func_values) > self.obj_func_tol:
@@ -204,7 +208,7 @@ class EnOpt(Optimize):
                         self.logger.info(info_str_iter)
 
                     # Update step size in the one-dimensional case
-                    if new_state.size == 1:
+                    if new_state.size == 1 and hasattr(self.optimizer, 'step_size'):
                         self.optimizer.step_size /= 2
 
                     # Iteration was a success

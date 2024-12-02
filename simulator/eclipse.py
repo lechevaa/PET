@@ -49,6 +49,10 @@ class eclipse:
                 - reportpoint: these are the dates the simulator reports results
                 - reporttype: this key states that the report poins are given as dates
                 - datatype: the data types the simulator reports
+                - replace: replace failed simulations with randomly selected successful ones
+                - rerun: in case of failure, try to rerun the simulator the given number of times
+                - startdate: simulaton start date
+                - saveforecast: save the predicted measurements for each iteration
 
         filename : str, optional
             Name of the .mako file utilized to generate the ECL input .DATA file. Must be in uppercase for the
@@ -212,12 +216,12 @@ class eclipse:
         """
         Setup the simulator.
 
-        Parameters
+        Attributes
         ----------
-        assimIndex: int
+        assimIndex : int
             Gives the index-type (e.g. step,time,etc.) and the index for the
             data to be assimilated
-        trueOrder:
+        trueOrder : 
             Gives the index-type (e.g. step,time,etc.) and the index of the true data
         """
         self.__dict__.update(kwargs)  # parse kwargs input into class attributes
@@ -356,7 +360,7 @@ class eclipse:
 
         Parameters
         ----------
-        Folder : str, optional
+        folder : str, optional
             Path to the ecl_100 run folder.
 
         ensembleMember : int, optional
@@ -792,21 +796,15 @@ class eclipse:
 
         Parameters
         ----------
-        file_rsm : str
-            Summary file from ECL 100.
-
-        file_rst : str
-            Restart file from ECL 100.
-
         whichResponse : str
             Which of the responses is to be outputted (e.g., WBHP PRO-1, WOPR, PRESS, OILSAT, etc).
-
-        member : int, optional
-            Ensemble member that is finished.
 
         ext_data_info : tuple, optional
             Tuple containing the assimilation step information, including the place of assimilation (e.g., which TIME) and the
             index of this assimilation place.
+
+        member : int, optional
+            Ensemble member that is finished.
 
         Returns
         -------
@@ -1024,10 +1022,10 @@ class ecl_100(eclipse):
 
         Parameters
         ----------
-        Path : str
+        path : str
             Alternative folder for the ecl_100.data file.
 
-        Wait_for_proc : bool, optional
+        wait_for_proc : bool, optional
             Logical variable to wait for the simulator to finish. Default is False.
 
         Returns
@@ -1083,13 +1081,14 @@ class ecl_300(eclipse):
 
         Parameters
         ----------
-        Path : str
+        path : str
             Alternative folder for the ecl_100.data file.
 
-        Wait_for_proc : bool, optional
+        wait_for_proc : bool, optional
             Logical variable to wait for the simulator to finish. Default is False.
 
-        NOTE: For now, this option is only utilized in a single localization option.
+            !!! note
+                For now, this option is only utilized in a single localization option.
 
         Returns
         -------

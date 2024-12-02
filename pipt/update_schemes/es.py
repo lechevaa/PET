@@ -25,11 +25,6 @@ class esMixIn():
         """
         The class is initialized by passing the PIPT init. file upwards in the hierarchy to be read and parsed in
         `pipt.input_output.pipt_init.ReadInitFile`.
-
-        Parameters
-        ----------
-        init_file: str
-            PIPT init. file containing info. to run the inversion algorithm
         """
         # Pass init. file to Simultaneous parent class (Python searches parent classes from left to right).
         super().__init__(keys_da, keys_fwd, sim)
@@ -91,9 +86,9 @@ class es_approx(esMixIn, enkf_approx):
     pass
 
 
-class es_full(esMixIn, enkf_approx):
+class es_full(esMixIn, enkf_full):
     """
-    mixin of ES class and approx update.
+    mixin of ES class and full update.
     Note that since we do not iterate there is no difference between is full and approx.
     """
     pass

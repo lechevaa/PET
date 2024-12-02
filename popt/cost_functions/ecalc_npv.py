@@ -9,7 +9,7 @@ HERE = Path().cwd()  # fallback for ipynb's
 HERE = HERE.resolve()
 
 
-def ecalc_npv(pred_data, keys_opt, report):
+def ecalc_npv(pred_data, **kwargs):
     """
     Net present value cost function using eCalc to calculate emmisions
 
@@ -18,11 +18,14 @@ def ecalc_npv(pred_data, keys_opt, report):
     pred_data : array_like
         Ensemble of predicted data.
 
-    keys_opt : list
-        Keys with economic data.
+    **kwargs : dict
+        Other arguments sent to the npv function
 
-    report : list
-        Report dates.
+        keys_opt : list
+            Keys with economic data.
+
+        report : list
+            Report dates.
 
     Returns
     -------
@@ -32,7 +35,13 @@ def ecalc_npv(pred_data, keys_opt, report):
 
     from libecalc.application.energy_calculator import EnergyCalculator
     from libecalc.common.time_utils import Frequency
+    from ecalc_cli.infrastructure.file_resource_service import FileResourceService
+    from libecalc.presentation.yaml.file_configuration_service import FileConfigurationService
     from libecalc.presentation.yaml.model import YamlModel
+
+    # Get the necessary input
+    keys_opt = kwargs.get('input_dict', {})
+    report = kwargs.get('true_order', [])
 
     # Economic values
     npv_const = {}
@@ -45,6 +54,7 @@ def ecalc_npv(pred_data, keys_opt, report):
     Qwp = []
     Qwi = []
     Dd = []
+    T = []
     for i in np.arange(1, len(pred_data)):
 
         Qop.append(np.squeeze(pred_data[i]['fopt']) - np.squeeze(pred_data[i - 1]['fopt']))
@@ -52,6 +62,7 @@ def ecalc_npv(pred_data, keys_opt, report):
         Qwp.append(np.squeeze(pred_data[i]['fwpt']) - np.squeeze(pred_data[i - 1]['fwpt']))
         Qwi.append(np.squeeze(pred_data[i]['fwit']) - np.squeeze(pred_data[i - 1]['fwit']))
         Dd.append((report[1][i] - report[1][i - 1]).days)
+        T.append((report[1][i] - report[1][0]).days)
 
     # Write production data to .csv file for eCalc input, for each ensemble member
     Qop = np.array(Qop).T
@@ -59,6 +70,7 @@ def ecalc_npv(pred_data, keys_opt, report):
     Qgp = np.array(Qgp).T
     Qwi = np.array(Qwi).T
     Dd = np.array(Dd)
+    T = np.array(T)
     if len(Qop.shape) == 1:
         Qop = np.expand_dims(Qop,0)
         Qwp = np.expand_dims(Qwp, 0)
@@ -79,11 +91,20 @@ def ecalc_npv(pred_data, keys_opt, report):
 
         # Config
         model_path = HERE / "ecalc_config.yaml"  # "drogn.yaml"
-        yaml_model = YamlModel(path=model_path, output_frequency=Frequency.NONE)
+        configuration_service = FileConfigurationService(configuration_path=model_path)
+        resource_service = FileResourceService(working_directory=model_path.parent)
+        yaml_model = YamlModel(
+            configuration_service=configuration_service,
+            resource_service=resource_service,
+            output_frequency=Frequency.NONE,
+        )
         # comps = {c.name: id_hash for (id_hash, c) in yaml_model.graph.components.items()}
 
         # Compute energy, emissions
-        model = EnergyCalculator(graph=yaml_model.graph)
+        #model = EnergyCalculator(energy_model=yaml_model, expression_evaluator=yaml_model.variables)
+        #consumer_results = model.evaluate_energy_usage()
+        #emission_results = model.evaluate_emissions()
+        model = EnergyCalculator(graph=yaml_model.get_graph())
         consumer_results = model.evaluate_energy_usage(yaml_model.variables)
         emission_results = model.evaluate_emissions(yaml_model.variables, consumer_results)
 
@@ -97,7 +118,7 @@ def ecalc_npv(pred_data, keys_opt, report):
 
         value = (Qop[n, :] * npv_const['wop'] + Qgp[n, :] * npv_const['wgp'] - Qwp[n, :] * npv_const['wwp'] -
                  Qwi[n, :] * npv_const['wwi'] - Qem * npv_const['wem']) / (
-            (1 + npv_const['disc']) ** (Dd / 365))
+            (1 + npv_const['disc']) ** (T / 365))
         values.append(np.sum(value))
 
     # Save emissions for later analysis
@@ -117,7 +138,7 @@ def results_as_df(yaml_model, results, getter) -> pd.DataFrame:
     for id_hash in results:
         res = results[id_hash]
         res = getter(res)
-        component = yaml_model.graph.get_node(id_hash)
+        component = yaml_model.get_graph().get_node(id_hash)
         df[component.name] = res.values
         attrs[component.name] = {'id_hash': id_hash,
                                  'kind': type(component).__name__,

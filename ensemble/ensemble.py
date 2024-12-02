@@ -15,9 +15,9 @@ import datetime as dt
 from tqdm.auto import tqdm
 from p_tqdm import p_map
 import logging
+from geostat.decomp import Cholesky  # Making realizations
 
 # Internal imports
-from pipt.geostat.decomp import Cholesky  # Making realizations
 from pipt.misc_tools import cov_regularization
 from pipt.misc_tools import wavelet_tools as wt
 from misc import read_input_csv as rcsv
@@ -499,14 +499,14 @@ class Ensemble:
 
         Parameters
         ----------
-        input_state:
+        input_state :
             Use an input state instead of internal state (stored in self) to run predictions
-        save_prediction:
+        save_prediction :
             Save the predictions as a <save_prediction>.npz file (numpy compressed file)
 
         Returns
         -------
-        prediction:
+        prediction :
             List of dictionaries with keys equal to data types (in DATATYPE),
             containing the responses at each time step given in PREDICTION.
 

@@ -10,7 +10,7 @@ setup(
     author_email='krfo@norceresearch.no',
     description='Python Ensemble Toolbox',
     install_requires=[
-        'numpy',
+        'numpy==1.26.4',
         'scipy',
         'matplotlib',
         'h5py',
@@ -29,6 +29,8 @@ setup(
         'tomli-w',
         'pyyaml',
         # 'libecalc',
-        'scikit-learn'
+        'scikit-learn',
+        'tensorflow-cpu',
+        'resdata'
     ],
 )

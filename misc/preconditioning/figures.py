@@ -61,7 +61,10 @@ def plot_loss(en_hist_dict, figname, ml_model_folder, finetuning):
                 x_range = list(range(x))
                 plt.plot(x_range, np.array(plot_dict[well])[x_range], linestyle='--',  color=colors[j], linewidth=2)
                 plt.scatter(x_range, np.array(plot_dict[well])[x_range], color=colors[j], marker=point_styles[j], label=f"$\\mathbf{{{well}}}$", s=8)
-                plt.axvline(x=x_range[0] + 0.5, color='black', linestyle='--', label=r'\textbf{Ensemble} \textbf{ iteration}', linewidth=2)
+                if j == 0:
+                    plt.axvline(x=x_range[0] + 0.5, color='black', linestyle='--', label=r'\textbf{Ensemble} \textbf{ iteration}', linewidth=2)
+                else:
+                    plt.axvline(x=x_range[0] + 0.5, color='black', linestyle='--', linewidth=2)
             else:
                 x_range = list(range(x_range[-1] + 1, x_range[-1] + x + 1))
                 plt.plot(x_range, np.array(plot_dict[well])[x_range], linestyle='--', color=colors[j], linewidth=2)
@@ -87,8 +90,8 @@ def quality_plots(well_name:str, figname:str, ml_model_folder:str, epsilon:float
         y_true = np.array(data_dict['solutions'])
     
     # Data processing
-    # props = ['PRESSURE', 'SWAT', 'SGAS', 'RV', 'RS']
-    props = [r'p_o', r's_w', r's_o', r'r_v', r'r_s']
+    # props = ['PRESSURE', 'SWAT', 'SOIL', 'RS']
+    props = [r'p_o', r's_w', r's_o', r'r_s']
     Nc = int(y_true.shape[1]/len(props))
 
     plt.rcParams['text.usetex'] = True
@@ -122,6 +125,41 @@ def quality_plots(well_name:str, figname:str, ml_model_folder:str, epsilon:float
 
     if is_well_model_ready:
         return well_name
+    return 
+
+
+def swim_quality_plots(kerswim, X_train, Y_train, well_name:str, figname:str, ml_model_folder:str) -> None:
+    # Data processing
+    # props = ['PRESSURE', 'SWAT', 'SOIL', 'RS']
+    props = [r'p_o', r's_w', r's_o', r'r_s']
+    Nc = int(Y_train.shape[1]/len(props))
+
+    y_hat = kerswim.predict(X_train)
+    plt.rcParams['text.usetex'] = True
+    plt.rcParams['font.size'] = 12
+
+    fig, axs = plt.subplots(1, len(props), figsize=(6*len(props), 6))
+    for i, prop in enumerate(props):
+    
+        prop_true = Y_train[:, i*Nc:(i+1)*Nc]
+        prop_pred = y_hat[:, i*Nc:(i+1)*Nc]
+
+        prop_true_l2 = np.linalg.norm(prop_true, axis=1)
+        prop_pred_l2 = np.linalg.norm(prop_pred, axis=1)
+        slope, _, r2 = perform_linear_regression(prop_true_l2,  prop_pred_l2)
+
+        # Parity Plots                             
+        axs[i].scatter(prop_pred_l2, prop_true_l2, label=well_name, s=5)
+        plot_range = [min(min(prop_pred_l2), min(prop_true_l2)), max(max(prop_pred_l2), max(prop_true_l2))]
+        axs[i].plot(plot_range, plot_range, color='red', linestyle='--')
+        axs[i].set_xlabel(f"$\\mathbf{{\\|\\hat{{{prop}}}\\|_2}}$", fontsize=28)
+        axs[i].set_ylabel(f"$\\mathbf{{\\|{prop}\\|_2}}$", fontsize=28)
+        axs[i].set_title(f"$\\mathbf{{{prop}}}$: $\\mathbf{{R^2 =}}${r2:.2f}, slope: $\\mathbf{{a={slope:.2f}}}$", fontsize=24)
+
+
+    fig.tight_layout()
+    plt.savefig(f'{ml_model_folder}/swim_{figname}_{well_name}.png', dpi=500)
+    plt.close()
     return 
 
 

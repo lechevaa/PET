@@ -65,27 +65,30 @@ def extract_N_well_schedule_and_rates(simdata, root, grid, well_names, N):
         rd_sum = ResdataFile(root + '.' + sim)
         WI = WellInfo(grid, rd_sum)
         for well_name in well_names:
+            # In case of 3dBox, all wells are defined at the very beginning, so they appear at every step except the very first one. 
             if well_name in WI.allWellNames():
-                if well_name not in well_starts.keys():
-                    # schedule
-                    well_schedule[well_name].append(True)
-                    # rates
-                    well_rates[well_name].append(WI[well_name][0].volumeRate())
-                elif i - well_starts[well_name] < N:
-                    # schedule
-                    well_schedule[well_name].append(True)
-                    # rates
-                    well_rates[well_name].append(WI[well_name][0].volumeRate()) 
+                if WI[well_name][0].isOpen():
+                    if well_name not in well_starts.keys():
+                        well_starts[well_name] = i
+                        # schedule
+                        well_schedule[well_name].append(True)
+                        # rates
+                        well_rates[well_name].append(WI[well_name][0].volumeRate()) 
+                    elif i - well_starts[well_name] < N:
+                        well_schedule[well_name].append(True)
+                        # rates
+                        well_rates[well_name].append(WI[well_name][0].volumeRate()) 
+                    else:
+                        well_schedule[well_name].append(False)
+                        well_rates[well_name].append(-np.inf)
                 else:
                     well_schedule[well_name].append(False)
                     well_rates[well_name].append(-np.inf)
             else:
-                well_schedule[well_name].append(False)
-                well_rates[well_name].append(-np.inf)
-            if sum(well_schedule[well_name]) == 1:
-                well_starts[well_name] = i
+                    well_schedule[well_name].append(False)
+                    well_rates[well_name].append(-np.inf)
 
-    return well_schedule, well_rates
+    return well_schedule, well_rates, well_starts
 
 def extract_dynamic_props(sim, root, props):
     prop_np = []
@@ -188,6 +191,13 @@ def clean_folder(folder_path):
     shutil.rmtree(folder_path)
     return 
 
+def dataset_cleaning(ml_data_folder, well_mode_dict):
+    well_names = well_mode_dict['INJ'] + well_mode_dict['PROD']
+    for well_name in well_names:
+        path = ml_data_folder + os.sep + well_name
+        shutil.rmtree(path)
+    return 
+
 def dataset_preparation(member, en_i, well_mode_dict):
     ml_data_folder = 'En_ml_data'
     ensemble_iter_folder = 'En_iter'
@@ -236,56 +246,46 @@ def dataset_preparation(member, en_i, well_mode_dict):
     # Compute well schedule for input features, we don't care about the last timestep
     # well_schedules, well_rates = extract_well_schedule_and_rates(simdata[:-1], root, grid, well_names)
     N = 10
-    well_schedules, well_rates =  extract_N_well_schedule_and_rates(simdata[:-1], root, grid, well_names, N=N)
-    
+    well_schedules, well_rates, well_starts =  extract_N_well_schedule_and_rates(simdata[:-1], root, grid, well_names, N=N)
     # Static Features 
     stat_props = ['PERMX']
 
     stat_props_np = extract_static_props(root, stat_props)
-
+ 
     # Static and Dynamic features extraction
     # Dynamic features
-    dyn_props = ['PRESSURE', 'SWAT', 'SGAS', 'RV', 'RS']
+    dyn_props = ['PRESSURE', 'SWAT', 'SGAS', 'RS']
     assert len(well_schedules[well_names[0]]) == len(simdata) - 1 == len(dts)
     # If opm creates empty file due to exceptions, dyn_props_np is None
-    dyn_props_np = extract_dynamic_props(simdata[0], root, dyn_props)
-    broken = False
-    if dyn_props_np is not None:
-        for i in range(1, len(simdata)):
-            well_dyn_props = defaultdict(lambda: defaultdict(list))
-            for well_name in well_names:
-                # Check if well is active during this step
-                if well_schedules[well_name][i - 1]:
-                    # Get local property
-                    local_dyn_props_np = dyn_props_np[:, well_local_domains[well_name]['f'], :]
-                    well_dyn_props[well_name]['X'] = local_dyn_props_np
-                    well_dyn_props[well_name]['dt'] = dts[i-1]
-                    well_dyn_props[well_name]['RESV'] = well_rates[well_name][i-1]
+    well_dyn_props_opening = defaultdict(lambda: defaultdict(list))
+    for i in range(len(simdata)):
+        dyn_props_np = extract_dynamic_props(simdata[i], root, dyn_props)
+        for well_name in well_names:
+            # Check if well is active during this step
+            if i == well_starts[well_name] and well_schedules[well_name][i]:
+                # Get local property
+                well_dyn_props_opening[well_name]['X'] = dyn_props_np[:, well_local_domains[well_name]['f'], :]
+                
+    for i in range(len(simdata)):
+        well_dyn_props = defaultdict(lambda: defaultdict(list))
+        dyn_props_np = extract_dynamic_props(simdata[i], root, dyn_props)
+        # Full grid feature extraction
+        for well_name in well_names:
+            # Check if well was active during previous step
+            if well_schedules[well_name][i-1]:
+                # Get local property
+                well_dyn_props[well_name]['Y'] = dyn_props_np[:, well_local_domains[well_name]['f'], :]
+                well_dyn_props[well_name]['dt'] = sum(dts[well_starts[well_name]: i])
+                well_dyn_props[well_name]['RESV'] = sum(well_rates[well_name][well_starts[well_name]: i])
 
-            # Full grid feature extraction
-            dyn_props_np = extract_dynamic_props(simdata[i], root, dyn_props)
-            # There may be some crash at any step of the simulation, need to check and stop if so
-            if dyn_props_np is None:
-                print(f"Breaking due to corrupted input data at sim {i} from member {member}")
-                broken = True
-                break
-            if broken:
-                print("Not supposed to be here")
-            for well_name in well_names:
-                # Check if well was active during previous step
-                if well_schedules[well_name][i-1]:
-                    # Get local property
-                    local_dyn_props_np = dyn_props_np[:, well_local_domains[well_name]['f'], :]
-                    well_dyn_props[well_name]['Y'] = local_dyn_props_np
-                    
-            for well_name in well_names:
-                if well_schedules[well_name][i-1]:
-                    well_folder = ml_data_folder + os.sep + well_name
-                    well_ensemble_folder = well_folder + os.sep + 'En_' + str(member)
-                    os.makedirs(well_ensemble_folder, exist_ok=True)
-                    np.savez(well_ensemble_folder + os.sep + str(i), stat_props=stat_props_np[:, well_local_domains[well_name]['f'],:], 
-                        dyn_props_X=well_dyn_props[well_name]['X'], dyn_props_Y=well_dyn_props[well_name]['Y'], 
-                        dt=well_dyn_props[well_name]['dt'], RESV=well_dyn_props[well_name]['RESV'])
+        for well_name in well_names:
+            if well_schedules[well_name][i-1]:
+                well_folder = ml_data_folder + os.sep + well_name
+                well_ensemble_folder = well_folder + os.sep + 'En_' + str(member)
+                os.makedirs(well_ensemble_folder, exist_ok=True)
+                np.savez(well_ensemble_folder + os.sep + str(i), stat_props=stat_props_np[:, well_local_domains[well_name]['f'],:], 
+                    dyn_props_X=well_dyn_props_opening[well_name]['X'], dyn_props_Y=well_dyn_props[well_name]['Y'], 
+                    dt=well_dyn_props[well_name]['dt'], RESV=well_dyn_props[well_name]['RESV'])
                     
     clean_folder(folder_path=folder)
                     

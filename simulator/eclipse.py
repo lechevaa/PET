@@ -112,6 +112,9 @@ class eclipse:
         self.options['sim_flag'] = ''
         self.options['mpi'] = ''
         self.options['parsing-strictness'] = ''
+        if 'enable_write_all_solutions' in self.input_dict:
+            if self.input_dict['enable_write_all_solutions']:
+                self.options['enable_write_all_solutions'] = 'true'
         # Loop over options in SIMOPTIONS and extract the parameters we want
         if 'simoptions' in self.input_dict:
             if type(self.input_dict['simoptions'][0]) == str:
@@ -821,7 +824,6 @@ class eclipse:
         """
         # Check that we have no trailing spaces
         whichResponse = whichResponse.strip()
-
         # if ensemble DA method
         if member is not None:
             # Get results
@@ -881,7 +883,7 @@ class eclipse:
                 else:
                     # If well, read the rsm file
                     if ext_data_info is not None:  # Get the data at a specific well and time
-                        yFlow = self.ecl_case.summary_data(whichResponse, time)
+                        yFlow = self.ecl_case.summary_data(whichResponse, time)   
             elif len(whichResponse.split(' ')) == 1:  # field data
                 if whichResponse.upper() in ['FOPT', 'FWPT', 'FGPT', 'FWIT', 'FGIT']:
                     if ext_data_info is not None:

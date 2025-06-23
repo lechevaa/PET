@@ -63,7 +63,7 @@ class Assimilate:
             # if 'tempsave' in self.ensemble.keys_da and self.ensemble.keys_da['tempsave'] != 'no':
             #     self.ensemble.save_temp_state_iter(0, self.max_iter)  # save init. ensemble
 
-    def run(self):
+    def run(self, timer):
         """
         The general loop implemented here is:
 
@@ -96,148 +96,140 @@ class Assimilate:
         # Run a while loop until max. iterations or convergence is reached
         while self.ensemble.iteration < self.max_iter and conv is False:
             # Add a check to see if this is the prior model
-            if self.ensemble.iteration == 0:
-                # Calc forecast for prior model
-                # Inset 0 as input to forecast all data
-                self.calc_forecast()
+            with timer.timer(f"En {self.ensemble.iteration} simulation + data preparation"):
+                if self.ensemble.iteration == 0:
+                    # Calc forecast for prior model
+                    # Inset 0 as input to forecast all data
+                    self.calc_forecast()
 
-                # remove outliers
-                if 'remove_outliers' in self.ensemble.sim.input_dict:
-                    self.remove_outliers()
+                    # remove outliers
+                    if 'remove_outliers' in self.ensemble.sim.input_dict:
+                        self.remove_outliers()
 
-                if 'qa' in self.ensemble.keys_da:  # Check if we want to perform a Quality Assurance of the forecast
-                    # set updated prediction, state and lam
-                    qaqc.set(self.ensemble.pred_data,
-                             self.ensemble.state, self.ensemble.lam)
-                    # Level 1,2 all data, and subspace
-                    qaqc.calc_mahalanobis((1, 'time', 2, 'time', 1, None, 2, None))
-                    qaqc.calc_coverage()  # Compute data coverage
-                    qaqc.calc_kg({'plot_all_kg': True, 'only_log': False,
-                                 'num_store': 5})  # Compute kalman gain
-
-                success_iter = True
-
-                # always store prior forcast, unless specifically told not to
-                if 'nosave' not in self.ensemble.keys_da:
-                    np.savez('prior_forecast.npz', **
-                             {'pred_data': self.ensemble.pred_data})
-
-                # ml acceleration
-                if 'mlacceleration' in self.ensemble.keys_da:
-                    if self.ensemble.keys_da['mlacceleration']:
-                        ml_routine(self.ensemble.sim.input_dict['parallel'], self.ensemble.disable_tqdm, self.ensemble.iteration, finetuning=False)
-                        
-            # For the remaining iterations we start by applying the analysis and finish by running the forecast
-            else:
-                # Analysis (in the update_scheme class)
-                self.ensemble.calc_analysis()
-
-                if 'qa' in self.ensemble.keys_da and 'screendata' in self.ensemble.keys_da and \
-                        self.ensemble.keys_da['screendata'] == 'yes' and self.ensemble.iteration == 1:
-                    #  need to update datavar, and recompute mahalanobis measures
-                    self.logger.info(
-                        'Recomputing Mahalanobis distance with updated datavar')
-                    qaqc.datavar = self.datavar  # this is updated from calc_analysis
-                    # Level 1,2 all data, and subspace
-                    qaqc.calc_mahalanobis((1, 'time', 2, 'time', 1, None, 2, None))
-
-                # Forecast with the updated state
-                self.calc_forecast()
-
-                if 'remove_outliers' in self.ensemble.keys_da:
-                    self.remove_outliers()
-
-                # Check convergence (in the update_scheme class). Outputs logical variable to tell the while loop to
-                # stop, and a variable telling what criteria for convergence was reached.
-                # Also check if the objective function has been reduced, and use this function to accept the state and
-                # update the lambda values.
-                #
-                conv, success_iter, self.why_stop = self.ensemble.check_convergence()
-
-                if not conv and 'mlacceleration' in self.ensemble.keys_da:
-                    if self.ensemble.keys_da['mlacceleration']:
-                        ml_routine(self.ensemble.sim.input_dict['parallel'], self.ensemble.disable_tqdm, self.ensemble.iteration, finetuning=True)
-                        
-            # if reduction of objective function -> save the state
-            if success_iter:
-                # More general method to save all relevant information from an iteration analysis/forecast step
-                if 'iterinfo' in self.ensemble.keys_da:
-                    #
-                    self._save_iteration_information()
-                if self.ensemble.iteration > 0:
-                    # Temporary save state if options in TEMPSAVE have been given and the option is not 'no'
-                    if 'tempsave' in self.ensemble.keys_da and self.ensemble.keys_da['tempsave'] != 'no':
-                        self._save_during_iteration(self.ensemble.keys_da['tempsave'])
-                    if 'analysisdebug' in self.ensemble.keys_da:
-                        self._save_analysis_debug()
-                    if 'qc' in self.ensemble.keys_da:  # Check if we want to perform a Quality Control of the updated state
-                        # set updated prediction, state and lam
-                        qaqc.set(self.ensemble.pred_data,
-                                 self.ensemble.state, self.ensemble.lam)
-                        qaqc.calc_da_stat()  # Compute statistics for updated parameters
                     if 'qa' in self.ensemble.keys_da:  # Check if we want to perform a Quality Assurance of the forecast
                         # set updated prediction, state and lam
                         qaqc.set(self.ensemble.pred_data,
-                                 self.ensemble.state, self.ensemble.lam)
-                        qaqc.calc_mahalanobis(
-                            (1, 'time', 2, 'time', 1, None, 2, None))  # Level 1,2 all data, and subspace
-                        #  qaqc.calc_coverage()  # Compute data coverage
-                        qaqc.calc_kg()  # Compute kalman gain
+                                self.ensemble.state, self.ensemble.lam)
+                        # Level 1,2 all data, and subspace
+                        qaqc.calc_mahalanobis((1, 'time', 2, 'time', 1, None, 2, None))
+                        qaqc.calc_coverage()  # Compute data coverage
+                        qaqc.calc_kg({'plot_all_kg': True, 'only_log': False,
+                                    'num_store': 5})  # Compute kalman gain
 
-            # Update iteration counter if iteration was successful
-            if self.ensemble.iteration >= 0 and success_iter is True:
-                if self.ensemble.iteration == 0:
-                    self.ensemble.iteration += 1
-                    pbar_out.update(1)
-                    # pbar_out.set_description(f'Iterations (Obj. func. val:{self.data_misfit:.1f})')
-                    # self.prior_data_misfit = self.data_misfit
-                    # self.pbar_out.refresh()
+                    success_iter = True
+
+                    # always store prior forcast, unless specifically told not to
+                    if 'nosave' not in self.ensemble.keys_da:
+                        np.savez('prior_forecast.npz', **
+                                {'pred_data': self.ensemble.pred_data})
+                            
+                # For the remaining iterations we start by applying the analysis and finish by running the forecast
                 else:
-                    self.ensemble.iteration += 1
-                    pbar_out.update(1)
-                    pbar_out.set_description(
-                        f'Iterations (Obj. func. val:{self.ensemble.data_misfit:.1f}'
-                        f' Reduced: {100 * (1 - (self.ensemble.data_misfit / self.ensemble.prev_data_misfit)):.0f} %)')
-                    # self.pbar_out.refresh()
+                    # Analysis (in the update_scheme class)
+                    self.ensemble.calc_analysis()
 
-            if 'restartsave' in self.ensemble.keys_da and self.ensemble.keys_da['restartsave'] == 'yes':
-                self.ensemble.save()
+                    if 'qa' in self.ensemble.keys_da and 'screendata' in self.ensemble.keys_da and \
+                            self.ensemble.keys_da['screendata'] == 'yes' and self.ensemble.iteration == 1:
+                        #  need to update datavar, and recompute mahalanobis measures
+                        self.logger.info(
+                            'Recomputing Mahalanobis distance with updated datavar')
+                        qaqc.datavar = self.datavar  # this is updated from calc_analysis
+                        # Level 1,2 all data, and subspace
+                        qaqc.calc_mahalanobis((1, 'time', 2, 'time', 1, None, 2, None))
 
-        # always store posterior forcast and state, unless specifically told not to
-        if 'nosave' not in self.ensemble.keys_da:
-            try: # first try to save as npz file
-                np.savez('posterior_state_estimate.npz', **self.ensemble.state)
-                np.savez('posterior_forecast.npz', **{'pred_data': self.ensemble.pred_data})
-            except: # If this fails, store as pickle
-                with open('posterior_state_estimate.p', 'wb') as file:
-                    pickle.dump(self.ensemble.state, file)
-                with open('posterior_forecast.p', 'wb') as file:
-                    pickle.dump(self.ensemble.pred_data, file)
+                    # Forecast with the updated state
+                    self.calc_forecast()
 
-        # If none of the convergence criteria were met, max. iteration was the reason iterations stopped.
-        if conv is False:
-            reason = 'Iterations stopped due to max iterations reached!'
-        else:
-            reason = 'Convergence was met :)'
+                    if 'remove_outliers' in self.ensemble.keys_da:
+                        self.remove_outliers()
 
-        # Save why_stop in Numpy save file
-        # savez('why_iter_loop_stopped', why=self.why_stop, conv_string=reason)
+                    # Check convergence (in the update_scheme class). Outputs logical variable to tell the while loop to
+                    # stop, and a variable telling what criteria for convergence was reached.
+                    # Also check if the objective function has been reduced, and use this function to accept the state and
+                    # update the lambda values.
+                    #
+                    conv, success_iter, self.why_stop = self.ensemble.check_convergence()
 
-        # Save why_stop in pickle save file
-        why = self.why_stop
-        if why is not None:
-            why['conv_string'] = reason
-        with open('why_iter_loop_stopped.p', 'wb') as f:
-            pickle.dump(why, f, protocol=4)
-        # pbar.close()
-        pbar_out.close()
-        if self.ensemble.prev_data_misfit is not None:
-            out_str = 'Convergence was met.'
-            if self.ensemble.prior_data_misfit > self.ensemble.data_misfit:
-                out_str += f' Obj. function reduced from {self.ensemble.prior_data_misfit:0.1f} ' \
-                           f'to {self.ensemble.data_misfit:0.1f}'
-            tqdm.write(out_str)
-            self.ensemble.logger.info(out_str)
+                # if reduction of objective function -> save the state
+                if success_iter:
+                    # More general method to save all relevant information from an iteration analysis/forecast step
+                    if 'iterinfo' in self.ensemble.keys_da:
+                        #
+                        self._save_iteration_information()
+                    if self.ensemble.iteration > 0:
+                        # Temporary save state if options in TEMPSAVE have been given and the option is not 'no'
+                        if 'tempsave' in self.ensemble.keys_da and self.ensemble.keys_da['tempsave'] != 'no':
+                            self._save_during_iteration(self.ensemble.keys_da['tempsave'])
+                        if 'analysisdebug' in self.ensemble.keys_da:
+                            self._save_analysis_debug()
+                        if 'qc' in self.ensemble.keys_da:  # Check if we want to perform a Quality Control of the updated state
+                            # set updated prediction, state and lam
+                            qaqc.set(self.ensemble.pred_data,
+                                    self.ensemble.state, self.ensemble.lam)
+                            qaqc.calc_da_stat()  # Compute statistics for updated parameters
+                        if 'qa' in self.ensemble.keys_da:  # Check if we want to perform a Quality Assurance of the forecast
+                            # set updated prediction, state and lam
+                            qaqc.set(self.ensemble.pred_data,
+                                    self.ensemble.state, self.ensemble.lam)
+                            qaqc.calc_mahalanobis(
+                                (1, 'time', 2, 'time', 1, None, 2, None))  # Level 1,2 all data, and subspace
+                            #  qaqc.calc_coverage()  # Compute data coverage
+                            qaqc.calc_kg()  # Compute kalman gain
+
+                # Update iteration counter if iteration was successful
+                if self.ensemble.iteration >= 0 and success_iter is True:
+                    if self.ensemble.iteration == 0:
+                        self.ensemble.iteration += 1
+                        pbar_out.update(1)
+                        # pbar_out.set_description(f'Iterations (Obj. func. val:{self.data_misfit:.1f})')
+                        # self.prior_data_misfit = self.data_misfit
+                        # self.pbar_out.refresh()
+                    else:
+                        self.ensemble.iteration += 1
+                        pbar_out.update(1)
+                        pbar_out.set_description(
+                            f'Iterations (Obj. func. val:{self.ensemble.data_misfit:.1f}'
+                            f' Reduced: {100 * (1 - (self.ensemble.data_misfit / self.ensemble.prev_data_misfit)):.0f} %)')
+                        # self.pbar_out.refresh()
+
+                if 'restartsave' in self.ensemble.keys_da and self.ensemble.keys_da['restartsave'] == 'yes':
+                    self.ensemble.save()
+
+            # always store posterior forcast and state, unless specifically told not to
+            if 'nosave' not in self.ensemble.keys_da:
+                try: # first try to save as npz file
+                    np.savez('posterior_state_estimate.npz', **self.ensemble.state)
+                    np.savez('posterior_forecast.npz', **{'pred_data': self.ensemble.pred_data})
+                except: # If this fails, store as pickle
+                    with open('posterior_state_estimate.p', 'wb') as file:
+                        pickle.dump(self.ensemble.state, file)
+                    with open('posterior_forecast.p', 'wb') as file:
+                        pickle.dump(self.ensemble.pred_data, file)
+
+            # If none of the convergence criteria were met, max. iteration was the reason iterations stopped.
+            if conv is False:
+                reason = 'Iterations stopped due to max iterations reached!'
+            else:
+                reason = 'Convergence was met :)'
+
+            # Save why_stop in Numpy save file
+            # savez('why_iter_loop_stopped', why=self.why_stop, conv_string=reason)
+
+            # Save why_stop in pickle save file
+            why = self.why_stop
+            if why is not None:
+                why['conv_string'] = reason
+            with open('why_iter_loop_stopped.p', 'wb') as f:
+                pickle.dump(why, f, protocol=4)
+            # pbar.close()
+            pbar_out.close()
+            if self.ensemble.prev_data_misfit is not None:
+                out_str = 'Convergence was met.'
+                if self.ensemble.prior_data_misfit > self.ensemble.data_misfit:
+                    out_str += f' Obj. function reduced from {self.ensemble.prior_data_misfit:0.1f} ' \
+                            f'to {self.ensemble.data_misfit:0.1f}'
+                tqdm.write(out_str)
+                self.ensemble.logger.info(out_str)
 
     def remove_outliers(self):
 

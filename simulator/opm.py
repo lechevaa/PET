@@ -15,7 +15,7 @@ class flow(eclipse):
     simulations, and reading the results.
     """
 
-    def call_sim(self, folder=None, wait_for_proc=False):
+    def call_sim(self, folder=None, wait_for_proc=False, flow_option='flow'):
         """
         Call OPM flow simulator via shell.
 
@@ -43,16 +43,25 @@ class flow(eclipse):
                 com = []
                 if self.options['mpi']:
                     com.extend(self.options['mpi'].split())
-                com.append(self.options['sim_path'] + 'flow')
+                com.append(self.options['sim_path'] + flow_option)
                 if self.options['parsing-strictness']:
                     com.extend(['--parsing-strictness=' + self.options['parsing-strictness']])
+                if 'enable_write_all_solutions' in self.options:
+                    com.extend(['--enable-write-all-solutions=' + self.options['enable_write_all_solutions']])
+                    com.extend(['--enable-opm-rst-file=' + self.options['enable_write_all_solutions']])
                 com.extend(['--output-dir=' + folder, *
-                           self.options['sim_flag'].split(), filename + '.DATA'])
+                            self.options['sim_flag'].split(), filename + '.DATA'])
+                # Save solver informations 
+              
+                com.extend(['--output-extra-convergence-info=steps'])
+                com.extend(['--time-step-control=newtoniterationcount'])
+                com.extend(['--full-time-step-initially=true'])
+                
+            
                 if 'sim_limit' in self.options:
-                    call(com, stdout=DEVNULL, timeout=self.options['sim_limit'])
+                        call(com, stdout=DEVNULL, timeout=self.options['sim_limit'])
                 else:
-                    call(com, stdout=DEVNULL)
-                raise ValueError  # catch errors in run_sim
+                        call(com, stdout=DEVNULL)
         except:
             print('\nError in the OPM run.')  # add rerun?
             if not os.path.exists('Crashdump'):
